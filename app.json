@@ -30,6 +30,13 @@
       "expo-video",
       "expo-web-browser",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f7b4627b-6ad6-4c64-a10e-92ef6a4cb4ec"
+      }
+    },
+    "owner": "dineshwebdev"
   }
 }
