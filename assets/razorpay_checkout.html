@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    var options = {
+      key: "rzp_live_iTjKViK6W7WplJ", // Replace with your live key if needed
+      amount: 100, // Example: 100 paise = ₹1
+      currency: "INR",
+      name: "TN Happy Kids",
+      description: "Test Payment",
+      handler: function (response){
+        window.ReactNativeWebView.postMessage(JSON.stringify({ success: true, ...response }));
+      },
+      modal: { ondismiss: function(){ window.ReactNativeWebView.postMessage(JSON.stringify({ success: false, cancelled: true })); } }
+    };
+    var rzp = new Razorpay(options);
+    rzp.open();
+  </script>
+</body>
+</html> 
