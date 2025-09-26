@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Image, TouchableOpacity, Animated, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Colors from '../constants/colors';
 
 const StatusView = ({ user, status, visible, onClose }) => {
   const progress = new Animated.Value(0);
@@ -37,7 +38,7 @@ const StatusView = ({ user, status, visible, onClose }) => {
             <Text style={styles.userName}>{user.name}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={32} color="white" />
+            <Ionicons name="close" size={32} color={Colors.white} />
           </TouchableOpacity>
         </View>
         <Image source={{ uri: status.imageUrl }} style={styles.statusImage} resizeMode="contain" />
@@ -49,16 +50,16 @@ const StatusView = ({ user, status, visible, onClose }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black',
+    backgroundColor: Colors.black,
   },
   progressBarContainer: {
     height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: Colors.lightText,
     marginTop: 10,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: 'white',
+    backgroundColor: Colors.white,
   },
   header: {
     flexDirection: 'row',
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   userName: {
-    color: 'white',
+    color: Colors.white,
     fontWeight: 'bold',
     fontSize: 16,
   },

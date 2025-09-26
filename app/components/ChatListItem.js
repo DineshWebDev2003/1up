@@ -5,7 +5,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 const ChatListItem = ({ chat, onPress }) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
-      <Image source={chat.profilePic} style={styles.profilePic} />
+      <View style={styles.avatarContainer}>
+        {chat.profilePic ? (
+          <Image source={chat.profilePic} style={styles.profilePic} />
+        ) : (
+          <View style={styles.defaultAvatar}>
+            <Text style={styles.avatarText}>{chat.name?.charAt(0)?.toUpperCase() || 'U'}</Text>
+          </View>
+        )}
+      </View>
       <View style={styles.contentContainer}>
         <View style={styles.headerContainer}>
           <Text style={styles.name}>{chat.name}</Text>
@@ -36,11 +44,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  avatarContainer: {
+    marginRight: 15,
+  },
   profilePic: {
     width: 55,
     height: 55,
     borderRadius: 27.5,
-    marginRight: 15,
+  },
+  defaultAvatar: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   contentContainer: {
     flex: 1,

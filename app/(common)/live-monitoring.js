@@ -1,298 +1,595 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-import { Video } from 'expo-video';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ViewShot from 'react-native-view-shot';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, TextInput, Modal, Alert, FlatList } from 'react-native';
+import authFetch from '../utils/api';
+import { Picker } from '@react-native-picker/picker';
+import { Video } from 'expo-av';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { WebView } from 'react-native-webview';
 import LottieView from 'lottie-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Animatable from 'react-native-animatable';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import * as Notifications from 'expo-notifications';
+
+const COLORS = {
+  primary: '#5D9CEC',
+  secondary: '#FFD700',
+  accent: '#FF85A1',
+  white: '#FFFFFF',
+  black: '#000000',
+  text: '#4F4F4F',
+  lightText: '#A0A0A0',
+  background: '#F5F5F5',
+  card: '#FFFFFF',
+  shadow: '#000000',
+  lightBackground: '#EFEFEF',
+  overlay: 'rgba(0, 0, 0, 0.5)',
+};
+
+
 
 export default function LiveMonitoringScreen() {
-  const [isBranchActive, setIsBranchActive] = useState(true);
-  const [branchName, setBranchName] = useState('Main Branch');
+  const { branch_id: param_branch_id } = useLocalSearchParams();
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [branches, setBranches] = useState([]);
+
   const video = useRef(null);
-  const [videoUrl, setVideoUrl] = useState('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
-  const [isEditing, setIsEditing] = useState(false);
-  const [tempUrl, setTempUrl] = useState(videoUrl);
+  const viewShotRefs = useRef(new Map());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenUrl, setFullscreenUrl] = useState(null);
+  const [editingBranchId, setEditingBranchId] = useState(null);
+  const [tempUrl, setTempUrl] = useState('');
   const [playing, setPlaying] = useState(true);
 
+  const loadData = useCallback(async () => {
+    try {
+      // Check authentication using session token like id-card screen
+      const sessionToken = await AsyncStorage.getItem('sessionToken');
+      if (!sessionToken) {
+        console.warn('No session token found, user needs to log in');
+        router.replace('/login');
+        return;
+      }
+
+      // Load user data from AsyncStorage
+      let currentUser = null;
+      try {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (storedUserData) {
+          currentUser = JSON.parse(storedUserData);
+          setUser(currentUser);
+        }
+      } catch (storageError) {
+        console.error('Failed to load user data from storage:', storageError);
+      }
+
+      let targetBranchId;
+      // If the user is a Franchisee, ALWAYS use their own branch_id for security.
+      if (currentUser && currentUser.role === 'Franchisee') {
+        targetBranchId = currentUser.branch_id;
+      } else {
+        // For other roles (like Admin), use the param if available.
+        targetBranchId = param_branch_id;
+      }
+
+      const url = targetBranchId ? `/api/branches/get_branches.php?id=${targetBranchId}` : '/api/branches/get_branches.php';
+      console.log('Fetching branch data from URL:', url);
+      const response = await authFetch(url);
+      const data = await response.json();
+
+      if (data.success) {
+        const branchesData = Array.isArray(data.data) ? data.data : [data.data];
+        setBranches(branchesData);
+      } else {
+        setBranches([]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch branch data.');
+      console.error("Error loading data for live monitoring:", error);
+    }
+  }, [param_branch_id, router]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const onStateChange = (state) => {
-    console.log('Player State Changed:', state);
-    if (state === 'ended') {
-      setPlaying(false);
+    if (state === 'ended') setPlaying(false);
+  };
+
+  const onError = (error) => console.error('YouTube Player Error:', error);
+
+
+
+  const handleSaveUrl = async (branchId) => {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) return;
+
+    try {
+      const response = await authFetch('/api/branches/update_branch.php', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          id: branch.id,
+          name: branch.name,
+          address: branch.address || '',
+          location: branch.location || '',
+          camera_url: tempUrl 
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        Alert.alert('Success', 'Camera URL updated successfully.');
+        loadData(); // Refresh data
+      } else {
+        Alert.alert('Error', result.message || 'Failed to update URL.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An error occurred while updating the URL.');
+    }
+    setEditingBranchId(null);
+    setTempUrl('');
+  };
+
+  const handleFullscreen = async (url) => {
+    try {
+      setFullscreenUrl(url);
+      // Lock to landscape orientation for better video viewing
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      setIsFullscreen(true);
+      console.log('✅ Entered fullscreen mode for:', url);
+    } catch (error) {
+      console.error('Error entering fullscreen:', error);
+      Alert.alert('Error', 'Failed to enter fullscreen mode');
     }
   };
 
-  const onError = (error) => {
-    console.error('YouTube Player Error:', error);
-  };
-
-  const handleSaveUrl = () => {
-    setVideoUrl(tempUrl);
-    setIsEditing(false);
-  };
-
-  const handleFullscreen = async () => {
-    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT);
-    setIsFullscreen(true);
-  };
-
   const handleExitFullscreen = async () => {
-    await ScreenOrientation.unlockAsync();
-    setIsFullscreen(false);
+    try {
+      // Unlock orientation to allow normal rotation
+      await ScreenOrientation.unlockAsync();
+      setIsFullscreen(false);
+      setFullscreenUrl(null);
+      console.log('✅ Exited fullscreen mode');
+    } catch (error) {
+      console.error('Error exiting fullscreen:', error);
+      // Still close fullscreen even if orientation unlock fails
+      setIsFullscreen(false);
+      setFullscreenUrl(null);
+    }
   };
 
   const getYoutubeVideoId = (url) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
-    const videoId = (match && match[2].length === 11) ? match[2] : null;
-    console.log('Provided URL:', url);
-    console.log('Extracted Video ID:', videoId);
-    return videoId;
+    return (match && match[2].length === 11) ? match[2] : null;
   };
 
-  const getTwitchChannel = (url) => {
-    let match = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-    if (match) {
-      return match[1];
-    }
-    match = url.match(/[?&]channel=([^&]+)/);
-    return match ? match[1] : null;
-  };
-
-  const renderVideoPlayer = (inFullscreen = false) => {
-    const youtubeId = getYoutubeVideoId(videoUrl);
+  const renderVideoPlayer = (url, inFullscreen = false) => {
+    const youtubeId = getYoutubeVideoId(url);
     if (youtubeId) {
       return (
-        <YoutubeIframe
-          key={youtubeId}
-          height={inFullscreen ? '100%' : 220}
-          width={'100%'}
-          play={playing}
-          videoId={youtubeId}
-          onChangeState={onStateChange}
-          onError={onError}
-          webViewStyle={{opacity: 0.99}}
-        />
+        <View style={inFullscreen ? styles.fullscreenVideoContainer : { flex: 1 }}>
+          <YoutubeIframe
+            key={youtubeId}
+            height={inFullscreen ? '100%' : 300}
+            width={inFullscreen ? '100%' : undefined}
+            play={playing}
+            videoId={youtubeId}
+            onChangeState={onStateChange}
+            onError={onError}
+            webViewProps={{
+              style: { 
+                flex: 1, 
+                borderRadius: inFullscreen ? 0 : 15,
+                width: inFullscreen ? '100%' : undefined,
+                height: inFullscreen ? '100%' : undefined
+              },
+              injectedJavaScript: `
+                var style = document.createElement('style');
+                style.innerHTML = \`
+                  * { box-sizing: border-box; }
+                  html, body { 
+                    width: 100% !important; 
+                    height: 100% !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    overflow: hidden !important;
+                    ${inFullscreen ? 'position: fixed !important; top: 0 !important; left: 0 !important;' : ''}
+                  }
+                  #player, iframe { 
+                    width: 100% !important; 
+                    height: 100% !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    border: none !important;
+                    border-radius: ${inFullscreen ? '0' : '15px'} !important;
+                    ${inFullscreen ? 'position: fixed !important; top: 0 !important; left: 0 !important;' : ''}
+                  }
+                \`;
+                document.head.appendChild(style);
+                ${inFullscreen ? `
+                  // Hide YouTube controls overlay for better fullscreen experience
+                  setTimeout(() => {
+                    var controls = document.querySelector('.ytp-chrome-bottom');
+                    if (controls) controls.style.display = 'none';
+                    // Ensure video fills entire viewport
+                    document.body.style.transform = 'scale(1)';
+                    document.body.style.transformOrigin = 'top left';
+                  }, 1000);
+                ` : ''}
+              `,
+            }}
+          />
+        </View>
       );
     }
 
-    const twitchChannel = getTwitchChannel(videoUrl);
-    if (twitchChannel) {
-      const twitchUrl = `https://player.twitch.tv/?channel=${twitchChannel}&parent=localhost&autoplay=true`;
+    if (url && url.includes('twitch.tv')) {
       return (
-        <WebView
-          style={{ flex: 1, width: '100%' }}
-          source={{ uri: twitchUrl }}
-          allowsFullscreenVideo
-        />
+        <View style={inFullscreen ? styles.fullscreenVideoContainer : { flex: 1 }}>
+          <WebView
+            source={{ uri: url }}
+            style={inFullscreen ? styles.fullscreenVideo : { flex: 1, borderRadius: 15 }}
+            allowsInlineMediaPlayback={true}
+            originWhitelist={['*']}
+            allowsFullscreenVideo={true}
+            mediaPlaybackRequiresUserAction={false}
+          />
+        </View>
       );
     }
 
-    // Default to expo-av Video for direct links
+    if (url && (url.endsWith('.mp4') || url.endsWith('.m3u8'))) {
+      return (
+        <View style={inFullscreen ? styles.fullscreenVideoContainer : { flex: 1 }}>
+          <Video
+            ref={video}
+            style={inFullscreen ? styles.fullscreenVideo : styles.video}
+            source={{ uri: url }}
+            useNativeControls
+            resizeMode={inFullscreen ? "cover" : "contain"}
+            isLooping
+            shouldPlay
+          />
+        </View>
+      );
+    }
+
     return (
-      <Video
-        ref={video}
-        style={inFullscreen ? styles.fullscreenVideo : styles.video}
-        source={{ uri: videoUrl }}
-        contentFit="contain"
-        loop
-        playing
-        controls
-      />
+      <View style={styles.unsupportedVideoContainer}>
+        <Ionicons name="videocam-off-outline" size={50} color={COLORS.lightText} />
+        <Text style={styles.unsupportedVideoText}>Live feed format not supported.</Text>
+      </View>
     );
   };
 
-  const sendPushNotification = async () => {
-    // This is a placeholder. In a real app, you'd fetch tokens from your server.
-    const message = {
-      to: 'ExponentPushToken[...]', // This should be a valid token
-      sound: 'default',
-      title: 'Live Monitoring Alert',
-      body: `${branchName} has an update!`,
-      data: { someData: 'goes here' },
-    };
+  const sendPushNotification = async (branchId, branchName) => {
+    // Add authentication check before proceeding
+    const sessionToken = await AsyncStorage.getItem('sessionToken');
+    if (!sessionToken) {
+      Alert.alert('Authentication Error', 'You must be logged in to send notifications.');
+      return;
+    }
+
+    const viewShotRef = viewShotRefs.current.get(branchId);
+    if (!viewShotRef) {
+      Alert.alert('Error', 'Could not find video to capture.');
+      return;
+    }
 
     try {
-        // The following line is commented out as it requires a valid push token
-        // await Notifications.scheduleNotificationAsync({ content: message, trigger: null });
-        Alert.alert('Notification Sent', `A notification has been sent to all users of ${branchName}.`);
+      const uri = await viewShotRef.capture();
+
+      const formData = new FormData();
+      formData.append('thumbnail', {
+        uri,
+        name: `thumbnail_${branchId}.jpg`,
+        type: 'image/jpeg',
+      });
+
+      const uploadResponse = await authFetch('/api/notifications/upload_thumbnail.php', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const uploadResult = await uploadResponse.json();
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.message || 'Failed to upload thumbnail.');
+      }
+
+      const thumbnailUrl = uploadResult.url;
+      const message = `To users of ${branchName}: Your kid is now live! Want to see what they are doing in playschool, daycare, and toddler care?`;
+
+      const notificationResponse = await authFetch('/api/notifications/send_notification.php', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          branch_id: branchId, 
+          message, 
+          thumbnail_url: thumbnailUrl 
+        }),
+      });
+
+      if (!notificationResponse.ok) {
+        const error = new Error(`HTTP error! status: ${notificationResponse.status}`);
+        error.response = notificationResponse;
+        throw error;
+      }
+
+      const notificationResult = await notificationResponse.json();
+
+      if (notificationResult.success) {
+        Alert.alert('Success', 'Notification sent successfully!');
+      } else {
+        // Handle cases where the request was successful but the operation failed
+        Alert.alert('Error', notificationResult.message || 'Failed to send notification.');
+      }
     } catch (error) {
-        console.error('Error sending push notification:', error);
-        Alert.alert('Error', 'Could not send notification.');
+      console.error('--- Notification Error Catcher ---');
+      console.error('Error Name:', error.name);
+      console.error('Error Message:', error.message);
+      console.error('Error Object:', JSON.stringify(error, null, 2));
+
+      if (error.response) {
+        console.error('Error has a response object. Attempting to parse...');
+        try {
+          const errorData = await error.response.json();
+          console.error('Server error details:', errorData);
+          Alert.alert('Server Error', errorData.message || 'An unknown error occurred on the server.');
+        } catch (jsonError) {
+          console.error('Failed to parse JSON from response:', jsonError);
+          const rawText = await error.response.text();
+          console.error('Raw server response:', rawText);
+          Alert.alert('Server Error', 'Failed to parse server response. Check console for details.');
+        }
+      } else {
+        console.error('Error does not have a response object.');
+        Alert.alert('Application Error', error.message || 'An unknown application error occurred.');
+      }
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.container}>
-        <Text style={styles.title}>Live Monitoring</Text>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#5D9CEC', '#5D9CEC']} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Live Monitoring</Text>
+          <Text style={styles.headerSubtitle}>Stay connected with our centers</Text>
+        </View>
         <LottieView
           source={require('../../assets/camera.json')}
           autoPlay
           loop
           style={styles.lottieAnimation}
         />
+      </LinearGradient>
 
-        <Modal visible={isFullscreen} supportedOrientations={['landscape']}>
-          <View style={styles.fullscreenContainer}>
-            {renderVideoPlayer(true)}
-            <TouchableOpacity onPress={handleExitFullscreen} style={styles.exitButton}>
-              <Ionicons name="close" size={30} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </Modal>
+      <FlatList
+        data={branches}
+        keyExtractor={(item) => item.id.toString()}
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40, paddingTop: 20 }}
+        renderItem={({ item }) => {
+          const isEditing = editingBranchId === item.id;
+          return (
+            <Animatable.View animation="fadeInUp" duration={800} style={styles.videoCard}>
+              <LinearGradient colors={['#ffffff', '#f0f4ff']} style={styles.videoCardGradient}>
+                <Text style={styles.branchName}>{item.name}</Text>
+                <ViewShot ref={(ref) => viewShotRefs.current.set(item.id, ref)} options={{ format: 'jpg', quality: 0.9 }}>
+                  <View style={styles.videoWrapper}>
+                    {item.camera_url ? renderVideoPlayer(item.camera_url) : (
+                      <View style={styles.unsupportedVideoContainer}>
+                        <Ionicons name="videocam-off-outline" size={50} color={COLORS.lightText} />
+                        <Text style={styles.unsupportedVideoText}>No camera URL provided.</Text>
+                      </View>
+                    )}
+                  </View>
+                </ViewShot>
 
-        {isBranchActive ? (
-          <View style={styles.videoContainer}>
-            <Text style={styles.branchName}>{branchName}</Text>
-            <View style={styles.video}>
-              {renderVideoPlayer()}
-            </View>
-            {isEditing && (
-              <View style={styles.editContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Paste new video URL"
-                  value={tempUrl}
-                  onChangeText={setTempUrl}
-                />
-                <TouchableOpacity onPress={handleSaveUrl} style={styles.saveButton}>
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={styles.controlsContainer}>
-              <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
-                <LinearGradient colors={['#6a11cb', '#2575fc']} style={styles.controlButton}>
-                  <Ionicons name="camera-outline" size={22} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleFullscreen}>
-                <LinearGradient colors={['#fc466b', '#3f5efb']} style={styles.controlButton}>
-                  <Ionicons name="expand-outline" size={22} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={sendPushNotification}>
-                <LinearGradient colors={['#f5af19', '#f12711']} style={styles.controlButton}>
-                  <Ionicons name="notifications-outline" size={22} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.noBranchContainer}>
-            <Text style={styles.noBranchText}>No active branch to monitor.</Text>
-          </View>
+                {isEditing && (
+                  <Animatable.View animation="fadeIn" style={styles.editContainer}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Paste new video URL"
+                      placeholderTextColor={COLORS.lightText}
+                      value={tempUrl}
+                      onChangeText={setTempUrl}
+                    />
+                    <TouchableOpacity onPress={() => handleSaveUrl(item.id)}>
+                      <LinearGradient colors={[COLORS.primary, '#87CEEB']} style={styles.saveButton}>
+                        <Text style={styles.saveButtonText}>Save URL</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </Animatable.View>
+                )}
+
+                <View style={styles.controlsContainer}>
+                  <TouchableOpacity onPress={() => {
+                    if (isEditing) {
+                      setEditingBranchId(null);
+                      setTempUrl('');
+                    } else {
+                      setEditingBranchId(item.id);
+                      setTempUrl(item.camera_url || '');
+                    }
+                  }}>
+                    <LinearGradient colors={[COLORS.secondary, '#FFEC8B']} style={styles.controlButton}>
+                      <Ionicons name={isEditing ? "close-circle-outline" : "camera-outline"} size={24} color={COLORS.white} />
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  {item.camera_url && (
+                    <TouchableOpacity onPress={() => handleFullscreen(item.camera_url)}>
+                      <LinearGradient colors={[COLORS.accent, '#FFAAB8']} style={styles.controlButton}>
+                        <Ionicons name="expand-outline" size={24} color={COLORS.white} />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+
+                                                      <TouchableOpacity onPress={() => sendPushNotification(item.id, item.name)}>
+                    <LinearGradient colors={['#90C695', '#A2D4A5']} style={styles.controlButton}>
+                      <Ionicons name="notifications-outline" size={24} color={COLORS.white} />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </Animatable.View>
+          );
+        }}
+        ListEmptyComponent={() => (
+            <Animatable.View animation="fadeIn" style={styles.noFeedContainer}>
+                <Ionicons name="alert-circle-outline" size={60} color={COLORS.lightText} />
+                <Text style={styles.noFeedText}>No branches found.</Text>
+            </Animatable.View>
         )}
-      </View>
+      />
+
+      <Modal 
+        visible={isFullscreen} 
+        supportedOrientations={['landscape']}
+        animationType="fade"
+        statusBarTranslucent={true}
+        transparent={false}
+        presentationStyle="fullScreen"
+      >
+        <StatusBar hidden={true} />
+        <View style={styles.fullscreenContainer}>
+          {fullscreenUrl && renderVideoPlayer(fullscreenUrl, true)}
+          <TouchableOpacity onPress={handleExitFullscreen} style={styles.exitButton}>
+            <Ionicons name="close" size={30} color={COLORS.white} />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f0f2f5' },
-  container: { flex: 1, padding: 20, alignItems: 'center' },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 10,
-  },
-  lottieAnimation: {
-    width: 120,
-    height: 120,
-    marginBottom: 20,
-  },
-  videoContainer: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 10,
-    alignItems: 'center',
-  },
-  branchName: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#34495e',
-    marginBottom: 15,
-  },
-  video: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: 15,
-    backgroundColor: '#000',
-  },
-  controlsContainer: {
+  safeArea: { flex: 1, backgroundColor: COLORS.background },
+  header: {
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 70, 
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 15,
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  headerContent: { flex: 1 },
+  headerTitle: { fontSize: 28, fontWeight: 'bold', color: COLORS.white },
+  headerSubtitle: { fontSize: 16, color: COLORS.white, opacity: 0.9, marginTop: 4 },
+  lottieAnimation: { width: 120, height: 120, position: 'absolute', right: 0, top: 30 },
+  container: { flex: 1 },
+  pickerContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 15,
+    marginHorizontal: 20,
+    marginTop: -40, 
+    elevation: 8,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  picker: { flex: 1, height: 55, color: COLORS.text, borderWidth: 0 },
+  pickerItem: { color: COLORS.text },
+  pickerIcon: { position: 'absolute', right: 15 },
+  videoCard: {
+    marginHorizontal: 20,
+    marginTop: 25,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    backgroundColor: COLORS.white,
+  },
+  videoCardGradient: { borderRadius: 20, padding: 15 },
+  branchName: { fontSize: 22, fontWeight: 'bold', color: COLORS.text, marginBottom: 15, textAlign: 'center' },
+  videoWrapper: { width: '100%', aspectRatio: 16 / 9, borderRadius: 15, overflow: 'hidden', backgroundColor: COLORS.black },
+  video: { flex: 1 },
+  controlsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 },
   controlButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 10,
+    elevation: 5,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
   },
-  noBranchContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noBranchText: {
-    fontSize: 18,
-    color: '#7f8c8d',
-  },
-  editContainer: {
-    width: '100%',
-    marginTop: 15,
-  },
+  noFeedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
+  noFeedText: { fontSize: 18, color: COLORS.lightText, marginTop: 10 },
+  editContainer: { width: '100%', marginTop: 20 },
   input: {
-    backgroundColor: '#f0f2f5',
+    backgroundColor: COLORS.lightBackground,
     borderRadius: 10,
-    padding: 12,
+    padding: 15,
     fontSize: 16,
     marginBottom: 10,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  saveButton: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  fullscreenContainer: {
-    flex: 1,
-    backgroundColor: '#000',
+  saveButton: { borderRadius: 10, padding: 15, alignItems: 'center' },
+  saveButtonText: { color: COLORS.white, fontWeight: 'bold', fontSize: 16 },
+  fullscreenContainer: { 
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'black',
     justifyContent: 'center',
     alignItems: 'center',
+    margin: 0,
+    padding: 0
   },
-  fullscreenVideo: {
+  fullscreenVideoContainer: { 
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'black',
+    justifyContent: 'center',
     width: '100%',
     height: '100%',
+    margin: 0,
+    padding: 0
   },
-  exitButton: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
+  fullscreenVideo: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    bottom: 0, 
+    right: 0,
+    width: '100%',
+    height: '100%',
+    margin: 0,
+    padding: 0
   },
+  exitButton: { 
+    position: 'absolute', 
+    top: 40, 
+    right: 20, 
+    padding: 15, 
+    backgroundColor: COLORS.overlay, 
+    borderRadius: 25,
+    zIndex: 1000
+  },
+  unsupportedVideoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E0E0E0', borderRadius: 15 },
+  unsupportedVideoText: { marginTop: 10, color: COLORS.lightText, fontSize: 16 },
 });
-

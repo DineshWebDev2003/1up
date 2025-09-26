@@ -1,129 +1,237 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, SafeAreaView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Modal, Platform, SafeAreaView, FlatList } from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import authFetch from '../utils/api';
+import Colors from '../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const branchColors = [
-  ['#ff9a9e', '#fad0c4'],
-  ['#a1c4fd', '#c2e9fb'],
-  ['#84fab0', '#8fd3f4'],
-  ['#fbc2eb', '#a6c1ee'],
-  ['#ffecd2', '#fcb69f'],
-];
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Animatable from 'react-native-animatable';
+import LottieView from 'lottie-react-native';
 
 export default function AvailableBranchesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [branchName, setBranchName] = useState('');
-  const [branchAddress, setBranchAddress] = useState('');
   const [branchLocation, setBranchLocation] = useState('');
-  const [branches, setBranches] = useState([
-    { id: '1', name: 'Main Campus', address: '123 Sunshine Ave', location: 'link1' },
-    { id: '2', name: 'North Branch', address: '456 Playful Rd', location: 'link2' },
-  ]);
-  const [focusedInput, setFocusedInput] = useState(null);
+  const [branchAddress, setBranchAddress] = useState('');
+  const [branchCameraUrl, setBranchCameraUrl] = useState('');
+  const [branches, setBranches] = useState([]);
+  const [editingBranch, setEditingBranch] = useState(null);
 
-  const handleAddBranch = () => {
-    if (branchName && branchAddress && branchLocation) {
-      const newBranch = { id: Date.now().toString(), name: branchName, address: branchAddress, location: branchLocation };
-      setBranches([...branches, newBranch]);
-      setBranchName('');
-      setBranchAddress('');
-      setBranchLocation('');
-      setModalVisible(false);
+  const fetchBranches = async () => {
+    try {
+      const response = await authFetch('/api/branches/get_branches.php');
+      const data = await response.json();
+      if (data.success) {
+        setBranches(data.data || []);
+      } else {
+        setBranches([]);
+        Alert.alert('Error', data.message || 'Failed to fetch branches.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch branches.');
+      console.error('Fetch branches error:', error);
     }
   };
 
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadBranches = async () => {
+        const sessionToken = await AsyncStorage.getItem('sessionToken');
+        if (sessionToken) {
+          fetchBranches();
+        }
+      };
+      loadBranches();
+    }, [])
+  );
+
+  const openEditModal = (branch) => {
+    setEditingBranch(branch);
+    setBranchName(branch.name);
+    setBranchLocation(branch.location);
+    setBranchAddress(branch.address);
+    setBranchCameraUrl(branch.camera_url || '');
+    setModalVisible(true);
+  };
+
+  const handleDeleteBranch = async (branchId) => {
+    Alert.alert(
+      "Delete Branch",
+      "Are you sure you want to delete this branch?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "OK",
+          onPress: async () => {
+            try {
+              const response = await authFetch('/api/branches/delete_branch.php', {
+                method: 'DELETE',
+                body: JSON.stringify({ id: branchId }),
+              });
+              const result = await response.json();
+              if (result.success) {
+                Alert.alert('Success', result.message);
+                fetchBranches(); // Refresh the list
+              } else {
+                // Enhanced error handling for user reassignment
+                if (result.users && result.user_count > 0) {
+                  const userList = result.users.map(user => `• ${user.name} (${user.role})`).join('\n');
+                  Alert.alert(
+                    'Cannot Delete Branch',
+                    `This branch has ${result.user_count} active users:\n\n${userList}\n\nPlease reassign these users to other branches first using the User Management screen.`,
+                    [{ text: "OK" }]
+                  );
+                } else {
+                  Alert.alert('Error', result.message || 'Failed to delete branch.');
+                }
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete branch.');
+              console.error('Delete branch error:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveBranch = async () => {
+    console.log('handleSaveBranch triggered. Editing Branch:', editingBranch);
+    
+    // Check authentication before proceeding
+    const sessionToken = await AsyncStorage.getItem('sessionToken');
+    console.log('Session token found:', sessionToken ? 'Yes' : 'No');
+    if (!sessionToken) {
+      Alert.alert('Authentication Error', 'Please log in to perform this action.');
+      return;
+    }
+
+    if (!branchName.trim() || !branchLocation.trim()) {
+      Alert.alert('Validation Error', 'Branch Name and Location are required.');
+      return;
+    }
+
+    const url = editingBranch ? '/api/branches/update_branch.php' : '/api/branches/create_branch.php';
+    const body = editingBranch
+      ? { id: editingBranch.id, name: branchName, address: branchAddress, location: branchLocation, camera_url: branchCameraUrl }
+      : { name: branchName, address: branchAddress, location: branchLocation, camera_url: branchCameraUrl };
+
+    try {
+      const response = await authFetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        Alert.alert('Success', result.message, [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Show notification badge/symbol
+              console.log('Branch operation completed successfully');
+            }
+          }
+        ]);
+        fetchBranches();
+        closeModal();
+      } else {
+        Alert.alert('Error', result.message || 'An unknown error occurred.');
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to ${editingBranch ? 'update' : 'create'} branch.`);
+      console.error('Save branch error:', error);
+    }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setBranchName('');
+    setBranchLocation('');
+    setBranchAddress('');
+    setBranchCameraUrl('');
+    setEditingBranch(null);
+  };
+
   const renderBranchItem = ({ item, index }) => (
-    <LinearGradient colors={branchColors[index % branchColors.length]} style={styles.branchItem}>
-      <View style={styles.branchInfo}>
-        <Text style={styles.branchName}>{item.name}</Text>
-        <Text style={styles.branchDetails}>{item.address}</Text>
-        <Text style={styles.branchDetails}>{item.location}</Text>
-      </View>
-      <View style={styles.branchActions}>
-        <TouchableOpacity onPress={() => { /* Handle Edit */ }}>
-          <Ionicons name="pencil" size={24} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => { /* Handle Delete */ }}>
-          <Ionicons name="trash" size={24} color="#fff" style={{ marginLeft: 15 }} />
-        </TouchableOpacity>
-      </View>
-    </LinearGradient>
+    <Animatable.View animation="fadeInUp" duration={500} delay={index * 100}>
+      <LinearGradient colors={Colors.gradientPrimary} style={styles.branchCard}>
+        <View style={styles.branchInfo}>
+          <Text style={styles.branchName}>{item.name}</Text>
+          <Text style={styles.branchDetails}><Ionicons name="location-sharp" size={14} color={'#FFF'} /> {item.address}</Text>
+          <Text style={styles.branchDetails}><Ionicons name="map-sharp" size={14} color={'#FFF'} /> {item.location}</Text>
+          <Text style={styles.branchDetails}><Ionicons name="camera-outline" size={14} color={'#FFF'} /> {item.camera_url || 'Not set'}</Text>
+        </View>
+        <View style={styles.branchActions}>
+          <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
+            <Ionicons name="pencil" size={22} color={'#FFF'} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDeleteBranch(item.id)} style={styles.actionButton}>
+            <Ionicons name="trash" size={22} color={'#FFF'} />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </Animatable.View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Available Branches</Text>
-
-      <TouchableOpacity onPress={() => setModalVisible(true)}>
-        <LinearGradient
-          colors={['#a1c4fd', '#c2e9fb']}
-          style={styles.createButton}
-        >
-          <Text style={styles.createButtonText}>Create New Branch</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      <LinearGradient colors={Colors.gradientMain} style={styles.header}>
+        <LottieView source={require('../../assets/Calendar Animation.json')} autoPlay loop style={styles.lottieAnimation} />
+        <Animatable.Text animation="fadeInDown" style={styles.title}>Branch Management</Animatable.Text>
+      </LinearGradient>
 
       <FlatList
         data={branches}
         keyExtractor={(item) => item.id}
         renderItem={renderBranchItem}
-        ListEmptyComponent={<Text style={styles.emptyListText}>No branches available.</Text>}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyListText}>No branches found. Add one!</Text></View>}
       />
 
-      <Modal animationType="slide" transparent={true} visible={modalVisible}>
+      <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.fab}>
+        <LinearGradient colors={['#5D9CEC', '#90C695']} style={styles.fabGradient}>
+          <Ionicons name="add" size={30} color="#FFF" />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={closeModal}>
         <View style={styles.modalContainer}>
-          <LinearGradient colors={['#fbc2eb', '#a6c1ee']} style={styles.modalContent}>
-            <Text style={[styles.modalTitle, { color: '#fff' }]}>Create New Branch</Text>
-
-            <View style={[styles.inputContainer, focusedInput === 'name' && styles.inputContainerFocused]}>
-              <Ionicons name="business-outline" size={24} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Branch Name"
-                placeholderTextColor="#888"
-                value={branchName}
-                onChangeText={setBranchName}
-                onFocus={() => setFocusedInput('name')}
-                onBlur={() => setFocusedInput(null)}
-              />
+          <Animatable.View animation="fadeInUpBig" style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{editingBranch ? 'Edit Branch' : 'Add New Branch'}</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="business-outline" size={22} color={'#888'} style={styles.inputIcon} />
+              <TextInput style={styles.input} placeholder="Branch Name" placeholderTextColor={'#888'} value={branchName} onChangeText={setBranchName} />
             </View>
-
-            <View style={[styles.inputContainer, focusedInput === 'address' && styles.inputContainerFocused]}>
-              <Ionicons name="location-outline" size={24} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Branch Address"
-                placeholderTextColor="#888"
-                value={branchAddress}
-                onChangeText={setBranchAddress}
-                onFocus={() => setFocusedInput('address')}
-                onBlur={() => setFocusedInput(null)}
-              />
+            <View style={styles.inputContainer}>
+              <Ionicons name="location-outline" size={22} color={'#888'} style={styles.inputIcon} />
+              <TextInput style={styles.input} placeholder="Branch Address" placeholderTextColor={'#888'} value={branchAddress} onChangeText={setBranchAddress} />
             </View>
-
-            <View style={[styles.inputContainer, focusedInput === 'location' && styles.inputContainerFocused]}>
-              <Ionicons name="map-outline" size={24} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Branch Location (Map Link)"
-                placeholderTextColor="#888"
-                value={branchLocation}
-                onChangeText={setBranchLocation}
-                onFocus={() => setFocusedInput('location')}
-                onBlur={() => setFocusedInput(null)}
-              />
+            <View style={styles.inputContainer}>
+              <Ionicons name="map-outline" size={22} color={'#888'} style={styles.inputIcon} />
+              <TextInput style={styles.input} placeholder="Branch Location (Map Link)" placeholderTextColor={'#888'} value={branchLocation} onChangeText={setBranchLocation} />
             </View>
-
+            <View style={styles.inputContainer}>
+              <Ionicons name="videocam-outline" size={22} color={'#888'} style={styles.inputIcon} />
+              <TextInput style={styles.input} placeholder="Camera URL" placeholderTextColor={'#888'} value={branchCameraUrl} onChangeText={setBranchCameraUrl} />
+            </View>
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleAddBranch}>
-                <Text style={styles.buttonText}>Save</Text>
+              <TouchableOpacity style={styles.button} onPress={closeModal}>
+                <LinearGradient colors={['#F5F5F5', '#E0E0E0']} style={styles.buttonGradient}>
+                  <Text style={[styles.buttonText, { color: '#4F4F4F' }]}>Cancel</Text>
+                </LinearGradient>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setModalVisible(false)}>
-                <Text style={styles.buttonText}>Cancel</Text>
+              <TouchableOpacity style={styles.button} onPress={handleSaveBranch}>
+                <LinearGradient colors={['#5D9CEC', '#90C695']} style={styles.buttonGradient}>
+                  <Text style={styles.buttonText}>{editingBranch ? 'Update' : 'Create'}</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
-          </LinearGradient>
+          </Animatable.View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -131,51 +239,29 @@ export default function AvailableBranchesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fffaf0', paddingHorizontal: 10, paddingTop: 20 },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ff6347',
-    textAlign: 'center',
-    marginBottom: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-condensed',
-  },
-  createButton: {
-    padding: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginBottom: 20,
-    marginHorizontal: 10,
-  },
-  createButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  branchItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderRadius: 15, marginBottom: 10, width: '100%' },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  header: { paddingTop: Platform.OS === 'android' ? 50 : 40, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, alignItems: 'center', justifyContent: 'center' },
+  lottieAnimation: { width: 120, height: 120, position: 'absolute', top: 0, right: 0, opacity: 0.3 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#FFF', textShadowColor: 'rgba(0, 0, 0, 0.2)', textShadowOffset: { width: -1, height: 1 }, textShadowRadius: 5 },
+  listContainer: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 80 },
+  branchCard: { borderRadius: 20, padding: 20, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5 },
   branchInfo: { flex: 1 },
-  branchName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  branchDetails: { fontSize: 14, color: '#fff', marginTop: 5, opacity: 0.9 },
-  branchActions: { flexDirection: 'row' },
-  emptyListText: { textAlign: 'center', color: '#aaa', marginTop: 20, fontSize: 16 },
-  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { width: '90%', borderRadius: 20, padding: 25, alignItems: 'center' },
-  modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    width: '100%',
-  },
-  inputContainerFocused: {
-    borderColor: '#ff6347',
-  },
+  branchName: { fontSize: 18, fontWeight: 'bold', color: '#FFF', marginBottom: 8 },
+  branchDetails: { fontSize: 14, color: '#FFF', marginTop: 4, flexDirection: 'row', alignItems: 'center' },
+  branchActions: { flexDirection: 'row', alignItems: 'center' },
+  actionButton: { marginLeft: 15, padding: 5 },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
+  emptyListText: { textAlign: 'center', color: '#999', fontSize: 16 },
+  fab: { position: 'absolute', bottom: 30, right: 30, borderRadius: 30, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  fabGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalContent: { backgroundColor: '#FFF', borderRadius: 20, padding: 25, width: '90%', alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 25, color: '#4F4F4F' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 15, paddingHorizontal: 15, marginBottom: 15, width: '100%' },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: 50, fontSize: 16, color: '#555' },
-  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 10 },
-  button: { flex: 1, padding: 15, borderRadius: 10, alignItems: 'center', marginHorizontal: 5 },
-  saveButton: { backgroundColor: 'rgba(50, 205, 50, 0.8)' },
-  cancelButton: { backgroundColor: 'rgba(255, 99, 71, 0.8)' },
-  buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  input: { flex: 1, height: 50, fontSize: 16, color: '#333' },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 20 },
+  button: { flex: 1, marginHorizontal: 5 },
+  buttonGradient: { padding: 15, borderRadius: 15, alignItems: 'center' },
+  buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 });

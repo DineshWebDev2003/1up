@@ -1,37 +1,45 @@
-import React, { useEffect, useRef } from 'react';
-import { Pressable, Text, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { Pressable, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Animatable from 'react-native-animatable';
+import Colors from '../constants/colors';
+import Theme from '../constants/theme';
 
-const ActionButton = ({ icon, title, colors, onPress, index }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+const ActionButton = ({ icon, title, colors, onPress, index, variant = 'default' }) => {
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      delay: index * 100, // Staggered delay
-      useNativeDriver: true,
-    }).start();
-
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 500,
-      delay: index * 100,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim, slideAnim, index]);
+  const getButtonColors = () => {
+    if (colors) return colors;
+    
+    // Default color schemes based on variant
+    switch (variant) {
+      case 'primary':
+        return Colors.gradientPrimary;
+      case 'secondary':
+        return Colors.gradientSecondary;
+      case 'success':
+        return Colors.gradientSuccess;
+      case 'warning':
+        return Colors.gradientWarning;
+      case 'info':
+        return Colors.gradientInfo;
+      case 'purple':
+        return [Colors.purple, Colors.purpleLight];
+      case 'orange':
+        return [Colors.orange, Colors.orangeLight];
+      case 'teal':
+        return [Colors.teal, Colors.tealLight];
+      default:
+        return Colors.gradientPrimary;
+    }
+  };
 
   return (
-    <Animated.View
-      style={[
-        styles.pressable,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
+    <Animatable.View
+      animation="fadeInUp"
+      duration={600}
+      delay={index * 120}
+      style={styles.pressable}
     >
       <Pressable
         style={({ pressed }) => [
@@ -40,12 +48,12 @@ const ActionButton = ({ icon, title, colors, onPress, index }) => {
         ]}
         onPress={onPress}
       >
-        <LinearGradient colors={colors} style={styles.container}>
-          <MaterialIcons name={icon} size={40} color="#fff" />
+        <LinearGradient colors={getButtonColors()} style={styles.container}>
+          <MaterialIcons name={icon} size={42} color={Colors.textOnPrimary} />
           <Text style={styles.title}>{title}</Text>
         </LinearGradient>
       </Pressable>
-    </Animated.View>
+    </Animatable.View>
   );
 };
 
@@ -54,36 +62,35 @@ const styles = StyleSheet.create({
     width: '28%',
     aspectRatio: 1,
     margin: '2.5%',
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 8,
+    borderRadius: Theme.borderRadius.xl,
+    backgroundColor: Colors.surface,
+    ...Theme.shadows.lg,
   },
   pressableContent: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: Theme.borderRadius.xl,
     overflow: 'hidden',
   },
   pressed: {
-    transform: [{ scale: 0.96 }],
-    shadowOpacity: 0.1,
-    elevation: 4,
+    transform: [{ scale: 0.94 }],
+    ...Theme.shadows.md,
   },
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    padding: Theme.spacing.sm,
   },
   title: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
+    ...Theme.typography.caption,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textOnPrimary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: Theme.spacing.sm,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
 

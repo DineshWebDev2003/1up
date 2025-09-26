@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1,
+    "quote_en": "The only way to do great work is to love what you do.",
+    "quote_ta": "சிறந்த வேலையைச் செய்ய ஒரே வழி, நீங்கள் செய்வதை நேசிப்பதுதான்.",
+    "author": "Steve Jobs"
+  },
+  {
+    "id": 2,
+    "quote_en": "Believe you can and you're halfway there.",
+    "quote_ta": "உங்களால் முடியும் என்று நம்புங்கள், நீங்கள் பாதி தூரம் கடந்துவிட்டீர்கள்.",
+    "author": "Theodore Roosevelt"
+  },
+  {
+    "id": 3,
+    "quote_en": "The future belongs to those who believe in the beauty of their dreams.",
+    "quote_ta": "தங்கள் கனவுகளின் அழகை நம்புபவர்களுக்கு எதிர்காலம் சொந்தமானது.",
+    "author": "Eleanor Roosevelt"
+  },
+  {
+    "id": 4,
+    "quote_en": "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+    "quote_ta": "வெற்றி இறுதியானது அல்ல, தோல்வி மரணமானது அல்ல: தொடர்வதற்கான தைரியமே முக்கியம்.",
+    "author": "Winston Churchill"
+  },
+  {
+    "id": 5,
+    "quote_en": "It does not matter how slowly you go as long as you do not stop.",
+    "quote_ta": "நீங்கள் நிற்காத வரை, எவ்வளவு மெதுவாகச் சென்றாலும் பரவாயில்லை.",
+    "author": "Confucius"
+  },
+  {
+    "id": 6,
+    "quote_en": "Your time is limited, don't waste it living someone else's life.",
+    "quote_ta": "உங்கள் நேரம் வரையறுக்கப்பட்டது, அதை மற்றவர்களின் வாழ்க்கையை வாழ்ந்து வீணாக்காதீர்கள்.",
+    "author": "Steve Jobs"
+  },
+  {
+    "id": 7,
+    "quote_en": "The purpose of our lives is to be happy.",
+    "quote_ta": "நமது வாழ்க்கையின் நோக்கம் மகிழ்ச்சியாக இருப்பதுதான்.",
+    "author": "Dalai Lama"
+  },
+  {
+    "id": 8,
+    "quote_en": "You only live once, but if you do it right, once is enough.",
+    "quote_ta": "நீங்கள் ஒரு முறை மட்டுமே வாழ்கிறீர்கள், ஆனால் அதைச் சரியாகச் செய்தால், ஒரு முறை போதும்.",
+    "author": "Mae West"
+  },
+  {
+    "id": 9,
+    "quote_en": "The journey of a thousand miles begins with a single step.",
+    "quote_ta": "ஆயிரம் மைல் பயணம் ஒரு படியில் தொடங்குகிறது.",
+    "author": "Lao Tzu"
+  },
+  {
+    "id": 10,
+    "quote_en": "That which does not kill us makes us stronger.",
+    "quote_ta": "நம்மைக் கொல்லாதது நம்மை வலிமையாக்குகிறது.",
+    "author": "Friedrich Nietzsche"
+  },
+  {
+    "id": 11,
+    "quote_en": "Strive not to be a success, but rather to be of value.",
+    "quote_ta": "வெற்றியாளராக இருக்க முயற்சிக்காதீர்கள், மாறாக மதிப்புமிக்கவராக இருக்க முயற்சி செய்யுங்கள்.",
+    "author": "Albert Einstein"
+  },
+  {
+    "id": 12,
+    "quote_en": "I have not failed. I've just found 10,000 ways that won't work.",
+    "quote_ta": "நான் தோல்வியடையவில்லை. வேலை செய்யாத 10,000 வழிகளைக் கண்டுபிடித்தேன்.",
+    "author": "Thomas A. Edison"
+  },
+  {
+    "id": 13,
+    "quote_en": "The mind is everything. What you think you become.",
+    "quote_ta": "மனம் தான் எல்லாம். நீங்கள் எதை நினைக்கிறீர்களோ அதுவாகவே ஆகிறீர்கள்.",
+    "author": "Buddha"
+  },
+  {
+    "id": 14,
+    "quote_en": "An unexamined life is not worth living.",
+    "quote_ta": "ஆய்வு செய்யப்படாத வாழ்க்கை வாழ்வதற்குத் தகுதியற்றது.",
+    "author": "Socrates"
+  },
+  {
+    "id": 15,
+    "quote_en": "The only true wisdom is in knowing you know nothing.",
+    "quote_ta": "உங்களுக்கு எதுவும் தெரியாது என்பதை அறிவதே உண்மையான ஞானம்.",
+    "author": "Socrates"
+  },
+  {
+    "id": 16,
+    "quote_en": "Everything you can imagine is real.",
+    "quote_ta": "நீங்கள் கற்பனை செய்யக்கூடிய அனைத்தும் உண்மையானவை.",
+    "author": "Pablo Picasso"
+  },
+  {
+    "id": 17,
+    "quote_en": "Do what you can, with what you have, where you are.",
+    "quote_ta": "உங்களிடம் உள்ளதைக் கொண்டு, நீங்கள் இருக்கும் இடத்தில், உங்களால் முடிந்ததைச் செய்யுங்கள்.",
+    "author": "Theodore Roosevelt"
+  },
+  {
+    "id": 18,
+    "quote_en": "The best way to predict the future is to create it.",
+    "quote_ta": "எதிர்காலத்தைக் கணிக்க சிறந்த வழி அதை உருவாக்குவதுதான்.",
+    "author": "Peter Drucker"
+  },
+  {
+    "id": 19,
+    "quote_en": "To live is the rarest thing in the world. Most people exist, that is all.",
+    "quote_ta": "வாழ்வது என்பது உலகில் அரிதான விஷயம். பெரும்பாலான மக்கள் இருக்கிறார்கள், அவ்வளவுதான்.",
+    "author": "Oscar Wilde"
+  },
+  {
+    "id": 20,
+    "quote_en": "It is never too late to be what you might have been.",
+    "quote_ta": "நீங்கள் இருந்திருக்கக்கூடிய நபராக மாறுவதற்கு ஒருபோதும் தாமதமில்லை.",
+    "author": "George Eliot"
+  },
+  {
+    "id": 21,
+    "quote_en": "If you want to lift yourself up, lift up someone else.",
+    "quote_ta": "உங்களை உயர்த்திக் கொள்ள விரும்பினால், மற்றவரை உயர்த்துங்கள்.",
+    "author": "Booker T. Washington"
+  },
+  {
+    "id": 22,
+    "quote_en": "The only impossible journey is the one you never begin.",
+    "quote_ta": "நீங்கள் தொடங்காத பயணம் மட்டுமே சாத்தியமற்றது.",
+    "author": "Tony Robbins"
+  },
+  {
+    "id": 23,
+    "quote_en": "In the end, it's not the years in your life that count. It's the life in your years.",
+    "quote_ta": "இறுதியில், உங்கள் வாழ்க்கையில் உள்ள ஆண்டுகள் கணக்கில் வராது. உங்கள் ஆண்டுகளில் உள்ள வாழ்க்கைதான் கணக்கில் வரும்.",
+    "author": "Abraham Lincoln"
+  },
+  {
+    "id": 24,
+    "quote_en": "Life is what happens when you're busy making other plans.",
+    "quote_ta": "நீங்கள் மற்ற திட்டங்களைத் தீட்டுவதில் மும்முரமாக இருக்கும்போது நடப்பதுதான் வாழ்க்கை.",
+    "author": "John Lennon"
+  },
+  {
+    "id": 25,
+    "quote_en": "The best revenge is massive success.",
+    "quote_ta": "மிகப்பெரிய பழிவாங்கல் மிகப்பெரிய வெற்றி.",
+    "author": "Frank Sinatra"
+  },
+  {
+    "id": 26,
+    "quote_en": "I am not a product of my circumstances. I am a product of my decisions.",
+    "quote_ta": "நான் என் சூழ்நிலைகளின் தயாரிப்பு அல்ல. நான் என் முடிவுகளின் தயாரிப்பு.",
+    "author": "Stephen Covey"
+  },
+  {
+    "id": 27,
+    "quote_en": "The most difficult thing is the decision to act, the rest is merely tenacity.",
+    "quote_ta": "மிகவும் கடினமான விஷயம் செயல்பட முடிவெடுப்பதுதான், மீதமுள்ளவை வெறும் விடாமுயற்சி.",
+    "author": "Amelia Earhart"
+  },
+  {
+    "id": 28,
+    "quote_en": "Either you run the day, or the day runs you.",
+    "quote_ta": "ஒன்று நீங்கள் நாளை நடத்துகிறீர்கள், அல்லது நாள் உங்களை நடத்துகிறது.",
+    "author": "Jim Rohn"
+  },
+  {
+    "id": 29,
+    "quote_en": "Whether you think you can or you think you can't, you're right.",
+    "quote_ta": "உங்களால் முடியும் என்று நினைத்தாலும், முடியாது என்று நினைத்தாலும், நீங்கள் சொல்வது சரிதான்.",
+    "author": "Henry Ford"
+  },
+  {
+    "id": 30,
+    "quote_en": "The two most important days in your life are the day you are born and the day you find out why.",
+    "quote_ta": "உங்கள் வாழ்க்கையில் மிக முக்கியமான இரண்டு நாட்கள் நீங்கள் பிறந்த நாள் மற்றும் ஏன் பிறந்தீர்கள் என்பதைக் கண்டுபிடிக்கும் நாள்.",
+    "author": "Mark Twain"
+  },
+  {
+    "id": 31,
+    "quote_en": "Whatever you are, be a good one.",
+    "quote_ta": "நீங்கள் யாராக இருந்தாலும், ஒரு நல்லவராக இருங்கள்.",
+    "author": "Abraham Lincoln"
+  },
+  {
+    "id": 32,
+    "quote_en": "If you can dream it, you can achieve it.",
+    "quote_ta": "நீங்கள் கனவு காண முடிந்தால், அதை அடைய முடியும்.",
+    "author": "Zig Ziglar"
+  },
+  {
+    "id": 33,
+    "quote_en": "Don't watch the clock; do what it does. Keep going.",
+    "quote_ta": "கடிகாரத்தைப் பார்க்காதீர்கள்; அது செய்வதைச் செய்யுங்கள். தொடர்ந்து செல்லுங்கள்.",
+    "author": "Sam Levenson"
+  },
+  {
+    "id": 34,
+    "quote_en": "The secret of getting ahead is getting started.",
+    "quote_ta": "முன்னேறுவதற்கான ரகசியம் தொடங்குவதுதான்.",
+    "author": "Mark Twain"
+  },
+  {
+    "id": 35,
+    "quote_en": "Well done is better than well said.",
+    "quote_ta": "நன்றாகச் சொல்வதை விட நன்றாகச் செய்வது மேல்.",
+    "author": "Benjamin Franklin"
+  },
+  {
+    "id": 36,
+    "quote_en": "You miss 100% of the shots you don't take.",
+    "quote_ta": "நீங்கள் எடுக்காத 100% ஷாட்களை நீங்கள் இழக்கிறீர்கள்.",
+    "author": "Wayne Gretzky"
+  },
+  {
+    "id": 37,
+    "quote_en": "Act as if what you do makes a difference. It does.",
+    "quote_ta": "நீங்கள் செய்வது ஒரு மாற்றத்தை ஏற்படுத்துகிறது என்பது போல் செயல்படுங்கள். அது செய்கிறது.",
+    "author": "William James"
+  },
+  {
+    "id": 38,
+    "quote_en": "What we think, we become.",
+    "quote_ta": "நாம் எதை நினைக்கிறோமோ, அதுவாகவே ஆகிறோம்.",
+    "author": "Buddha"
+  },
+  {
+    "id": 39,
+    "quote_en": "Keep your face always toward the sunshine—and shadows will fall behind you.",
+    "quote_ta": "உங்கள் முகத்தை எப்போதும் சூரிய ஒளியை நோக்கி வைத்திருங்கள்—நிழல்கள் உங்களுக்குப் பின்னால் விழும்.",
+    "author": "Walt Whitman"
+  },
+  {
+    "id": 40,
+    "quote_en": "The only limit to our realization of tomorrow will be our doubts of today.",
+    "quote_ta": "நாளைய நமது உணர்தலுக்கான ஒரே வரம்பு இன்றைய நமது சந்தேகங்களாக இருக்கும்.",
+    "author": "Franklin D. Roosevelt"
+  },
+  {
+    "id": 41,
+    "quote_en": "It is our choices that show what we truly are, far more than our abilities.",
+    "quote_ta": "நமது திறமைகளை விட, நமது தேர்வுகளே நாம் உண்மையில் யார் என்பதைக் காட்டுகின்றன.",
+    "author": "J.K. Rowling"
+  },
+  {
+    "id": 42,
+    "quote_en": "If you are not willing to risk the usual, you will have to settle for the ordinary.",
+    "quote_ta": "நீங்கள் வழக்கமானதை அபாயப்படுத்தத் தயாராக இல்லை என்றால், நீங்கள் சாதாரணமானவற்றுடன் திருப்தி அடைய வேண்டியிருக்கும்.",
+    "author": "Jim Rohn"
+  },
+  {
+    "id": 43,
+    "quote_en": "All our dreams can come true, if we have the courage to pursue them.",
+    "quote_ta": "நமது கனவுகள் அனைத்தும் நனவாகும், அவற்றைத் தொடர நமக்கு தைரியம் இருந்தால்.",
+    "author": "Walt Disney"
+  },
+  {
+    "id": 44,
+    "quote_en": "Don't be afraid to give up the good to go for the great.",
+    "quote_ta": "சிறந்ததை அடைய நல்லதை விட்டுவிட பயப்பட வேண்டாம்.",
+    "author": "John D. Rockefeller"
+  },
+  {
+    "id": 45,
+    "quote_en": "Success is walking from failure to failure with no loss of enthusiasm.",
+    "quote_ta": "உற்சாகத்தை இழக்காமல் தோல்வியிலிருந்து தோல்விக்குச் செல்வதே வெற்றி.",
+    "author": "Winston Churchill"
+  },
+  {
+    "id": 46,
+    "quote_en": "The successful warrior is the average man, with laser-like focus.",
+    "quote_ta": "வெற்றிகரமான வீரன் சராசரி மனிதன்தான், லேசர் போன்ற கவனத்துடன்.",
+    "author": "Bruce Lee"
+  },
+  {
+    "id": 47,
+    "quote_en": "There is only one way to avoid criticism: do nothing, say nothing, and be nothing.",
+    "quote_ta": "விமர்சனத்தைத் தவிர்க்க ஒரே ஒரு வழிதான் உள்ளது: எதுவும் செய்யாதீர்கள், எதுவும் சொல்லாதீர்கள், ஒன்றும் இல்லாமல் இருங்கள்.",
+    "author": "Aristotle"
+  },
+  {
+    "id": 48,
+    "quote_en": "The person who says it cannot be done should not interrupt the person who is doing it.",
+    "quote_ta": "இதைச் செய்ய முடியாது என்று சொல்பவர், அதைச் செய்பவரைத் தொந்தரவு செய்யக்கூடாது.",
+    "author": "Chinese Proverb"
+  },
+  {
+    "id": 49,
+    "quote_en": "You must be the change you wish to see in the world.",
+    "quote_ta": "உலகில் நீங்கள் காண விரும்பும் மாற்றமாக நீங்கள் இருக்க வேண்டும்.",
+    "author": "Mahatma Gandhi"
+  },
+  {
+    "id": 50,
+    "quote_en": "What you get by achieving your goals is not as important as what you become by achieving your goals.",
+    "quote_ta": "உங்கள் இலக்குகளை அடைவதன் மூலம் நீங்கள் பெறுவது, உங்கள் இலக்குகளை அடைவதன் மூலம் நீங்கள் ஆவதை விட முக்கியமல்ல.",
+    "author": "Zig Ziglar"
+  }
+]

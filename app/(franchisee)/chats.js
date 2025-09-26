@@ -1,112 +1,489 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView } from 'react-native';
-import { Link } from 'expo-router';
+import React from 'react';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Image, FlatList, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import StatusView from '../(common)/StatusView'; // Import the new StatusView component
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import GreenGradientBackground from '../components/GreenGradientBackground';
+import Colors from '../constants/colors';
+import authFetch from '../utils/api';
+import { API_URL } from '../../config';
 
-// Mock Data
-const mockUsers = {
-  '1': { id: '1', name: 'Admin', avatar: 'https://i.pravatar.cc/150?u=admin' },
-  '2': { id: '2', name: 'John Doe', avatar: 'https://i.pravatar.cc/150?u=john' },
-  '3': { id: '3', name: 'Jane Smith', avatar: 'https://i.pravatar.cc/150?u=jane' },
-};
 
-const mockStatuses = [
-  { userId: '2', imageUrl: 'https://picsum.photos/seed/status1/400/800' },
-  { userId: '3', imageUrl: 'https://picsum.photos/seed/status2/400/800' },
-];
-
-const mockConversations = [
-  { id: 'conv1', userId: '1', lastMessage: 'See you tomorrow!', timestamp: '10:45 AM' },
-  { id: 'conv2', userId: '2', lastMessage: 'Thanks for the update.', timestamp: '9:30 AM' },
-  { id: 'conv3', userId: '3', lastMessage: 'Can we reschedule?', timestamp: 'Yesterday' },
-];
+import { useFocusEffect } from 'expo-router';
 
 const FranchiseeChatsScreen = () => {
-  const [selectedStatus, setSelectedStatus] = useState(null);
+  const [currentUser, setCurrentUser] = React.useState(null);
+  const [chats, setChats] = React.useState([]);
+  const [stories, setStories] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const router = useRouter();
 
-  const handleStatusPress = (status) => {
-    setSelectedStatus(status);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (!userData) {
+        router.replace('/login');
+        return;
+      }
+      const user = JSON.parse(userData);
+      setCurrentUser(user);
+
+      const [chatResponse, storiesResponse] = await Promise.all([
+        authFetch(`/api/chat/get_franchisee_chat_list.php?branch_id=${user.branch_id}`),
+        authFetch('/api/stories/get_stories.php'),
+      ]);
+
+      const chatResult = await chatResponse.json();
+      if (chatResult.success && chatResult.data) {
+        const formattedChats = chatResult.data.map(c => ({ 
+          ...c, 
+          profilePic: (c.avatar && c.avatar.trim() !== '') ? { uri: `${API_URL}${c.avatar}` } : require('../../assets/Avartar.png'),
+          display_name: c.display_name || c.name || 'Unknown User'
+        }));
+        setChats(formattedChats);
+      } else {
+        setChats([]);
+        console.log('No chats found or API error:', chatResult.message);
+      }
+
+      const storiesResult = await storiesResponse.json();
+      if (storiesResult.success) {
+        setStories(storiesResult.data);
+      } else {
+        Alert.alert('Error', 'Failed to load stories.');
+      }
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      Alert.alert('Error', 'An error occurred while loading data.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const renderStatusItem = ({ item }) => {
-    const user = mockUsers[item.userId];
-    return (
-      <TouchableOpacity style={styles.statusItem} onPress={() => handleStatusPress(item)}>
-        <Image source={{ uri: user.avatar }} style={styles.statusAvatar} />
-        <Text style={styles.statusName} numberOfLines={1}>{user.name}</Text>
-      </TouchableOpacity>
-    );
+  useFocusEffect(React.useCallback(() => {
+    loadData();
+  }, []));
+
+  const handlePickStory = async () => {
+    try {
+      // Request permissions first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant media library permissions to select a story.');
+        return;
+      }
+
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 1,
+        videoMaxDuration: 45, // 45 seconds limit
+        allowsEditing: true,
+      });
+
+      console.log('ImagePicker result:', result);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const contentType = asset.type === 'video' ? 'video' : 'image';
+        
+        try {
+          const sessionToken = await AsyncStorage.getItem('sessionToken');
+          console.log('Session token available:', !!sessionToken);
+          
+          // Create FormData for file upload
+          const formData = new FormData();
+          formData.append('file', {
+            uri: asset.uri,
+            type: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+            name: asset.fileName || `story_${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`,
+          });
+          formData.append('title', 'My Story');
+          formData.append('content', 'Story from mobile app');
+          formData.append('content_type', contentType);
+          
+          console.log('FormData prepared:', {
+            uri: asset.uri,
+            type: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+            name: asset.fileName || `story_${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`,
+            contentType
+          });
+          
+          // Create upload with timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          
+          const response = await fetch(`${API_URL}/api/stories/create_story.php`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${sessionToken}`,
+            },
+            body: formData,
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+          
+          console.log('Upload response status:', response.status);
+          console.log('Response headers:', response.headers);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Server error response:', errorText);
+          Alert.alert('Error', `Server error: ${response.status}`);
+          return;
+        }
+        
+        const result = await response.json();
+        console.log('Server response:', result);
+        
+        if (result.success) {
+          Alert.alert('Success', 'Story uploaded successfully! It will expire in 10 hours.');
+          // Refresh stories list here if needed
+        } else {
+          Alert.alert('Error', result.message || 'Failed to upload story');
+        }
+      } catch (error) {
+        console.error('Error uploading story:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        
+        if (error.name === 'AbortError') {
+          Alert.alert('Timeout Error', 'Upload took too long. Please try again with a smaller file.');
+        } else if (error.message === 'Network request failed') {
+          Alert.alert('Network Error', 'Please check your internet connection and server availability.');
+        } else {
+          Alert.alert('Error', `Failed to upload story: ${error.message}`);
+        }
+      }
+    } else {
+      console.log('ImagePicker was canceled or no assets selected');
+    }
+    } catch (error) {
+      console.error('Error selecting story:', error);
+      Alert.alert('Error', 'Failed to select media. Please try again.');
+    }
   };
 
-  const renderConversationItem = ({ item }) => {
-    const user = mockUsers[item.userId];
-    return (
-      <Link href={`/(franchisee)/chat/${user.id}`} asChild>
-        <TouchableOpacity style={styles.chatItem}>
-          <Image source={{ uri: user.avatar }} style={styles.chatAvatar} />
-          <View style={styles.chatTextContainer}>
-            <Text style={styles.chatName}>{user.name}</Text>
-            <Text style={styles.chatLastMessage}>{item.lastMessage}</Text>
-          </View>
-          <Text style={styles.chatTimestamp}>{item.timestamp}</Text>
-        </TouchableOpacity>
-      </Link>
-    );
+  const handleDeleteStory = async (storyId) => {
+    try {
+      const response = await authFetch('/api/stories/story_crud.php', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: storyId }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        Alert.alert('Success', 'Story deleted successfully');
+        // Refresh stories list here if needed
+      } else {
+        Alert.alert('Error', result.message || 'Failed to delete story');
+      }
+    } catch (error) {
+      console.error('Error deleting story:', error);
+      Alert.alert('Error', 'Failed to delete story');
+    }
+  };
+
+  const handleChatPress = (chat) => {
+    router.push({
+      pathname: '/(common)/chat-detail',
+      params: { chatId: chat.id, name: chat.name },
+    });
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.header}>Conversations</Text>
+    <GreenGradientBackground>
+      <SafeAreaView style={styles.container}>
+        {/* Header with tab bar background */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>
+            {currentUser ? `${currentUser.name} - Chats` : 'Chats'}
+          </Text>
+          {currentUser && (
+            <Text style={styles.headerSubtitle}>
+              {currentUser.role} • {currentUser.branch || 'No Branch'}
+            </Text>
+          )}
+        </View>
         
-        <View style={styles.statusContainer}>
-          <Text style={styles.sectionTitle}>Status</Text>
+      <ScrollView>
+        <View style={styles.storiesContainer}>
+          <Text style={styles.updatesTitle}>Stories</Text>
           <FlatList
-            data={mockStatuses}
-            renderItem={renderStatusItem}
-            keyExtractor={(item) => item.userId}
+            data={[{ id: 'your-story', name: 'Your Story' }, ...stories]}
+            keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
+            renderItem={({ item, index }) => (
+              <TouchableOpacity 
+                style={styles.storyItem}
+                onPress={() => {
+                  if (item.id === 'your-story') {
+                    handlePickStory();
+                  } else {
+                    router.push({
+                      pathname: '/(common)/story-viewer',
+                      params: {
+                        allStories: JSON.stringify(stories),
+                        startIndex: index - 1
+                      }
+                    });
+                  }
+                }}
+                onLongPress={() => {
+                  if (item.id !== 'your-story' && item.user_id === currentUser.id) {
+                    Alert.alert(
+                      'Delete Story',
+                      'Are you sure you want to delete this story?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Delete', style: 'destructive', onPress: () => handleDeleteStory(item.id) }
+                      ]
+                    );
+                  }
+                }}
+              >
+                <View style={[styles.storyImageContainer, item.id === 'your-story' && styles.yourStoryContainer]}>
+                  {item.id === 'your-story' ? (
+                    <Ionicons name="add" size={24} color={Colors.primary} />
+                  ) : (
+                    <Image source={{ uri: item.profilePic?.uri || 'https://i.pravatar.cc/150?u=' + item.id }} style={styles.storyImage} />
+                  )}
+                </View>
+                <Text style={styles.storyName} numberOfLines={1}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
           />
         </View>
 
-        <FlatList
-          data={mockConversations}
-          renderItem={renderConversationItem}
-          keyExtractor={(item) => item.id}
-          style={styles.chatList}
-        />
-      </View>
-      {selectedStatus && (
-        <StatusView
-          user={mockUsers[selectedStatus.userId]}
-          status={selectedStatus}
-          visible={!!selectedStatus}
-          onClose={() => setSelectedStatus(null)}
-        />
-      )}
+        <View style={styles.updatesContainer}>
+          <Text style={styles.updatesTitle}>Talks</Text>
+          <ChatList chats={chats} onChatPress={handleChatPress} />
+        </View>
+      </ScrollView>
     </SafeAreaView>
+   </GreenGradientBackground>
+  );
+};
+
+const StoryItem = ({ item, index, onAddStory, router, currentUser, stories }) => {
+  const hasStory = item.id === 'your-story' ? currentUser.stories && currentUser.stories.length > 0 : item.items && item.items.length > 0;
+
+  if (item.id === 'your-story') {
+    return (
+      <TouchableOpacity style={styles.storyItem} onPress={() => {
+        if (hasStory) {
+          router.push({ 
+            pathname: '/(common)/story-viewer', 
+            params: { 
+              stories: JSON.stringify(currentUser.stories), 
+              user: 'Your Story', 
+              profilePic: currentUser.profilePic.uri 
+            }
+          });
+        } else {
+          onAddStory();
+        }
+      }}>
+        <Image source={currentUser.profilePic} style={[styles.storyImage, hasStory && styles.storyBorder]} />
+        {!hasStory && (
+          <View style={styles.plusIconContainer}>
+            <Ionicons name="add-circle" size={24} color="#007AFF" />
+          </View>
+        )}
+        <Text style={styles.storyName}>{item.name}</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <TouchableOpacity style={styles.storyItem} onPress={() => {
+        if (hasStory) {
+          const allStories = [currentUser, ...stories].filter(s => s.stories || (s.items && s.items.length > 0));
+          const userIndex = item.id === 'your-story' ? 0 : stories.findIndex(s => s.id === item.id) + 1;
+
+          router.push({ 
+            pathname: '/(common)/story-viewer', 
+            params: { 
+              allStories: JSON.stringify(allStories),
+              startIndex: userIndex
+            }
+          });
+        }
+      }}>
+
+      <Image 
+        source={item.profilePic} 
+        style={[styles.storyImage, hasStory && styles.storyBorder]} 
+      />
+      <Text style={styles.storyName}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+};
+
+const ChatList = ({ chats, onChatPress }) => {
+  const handleCallPress = (phone) => {
+    if (phone) {
+      Linking.openURL(`tel:${phone}`);
+    } else {
+      Alert.alert('No Number', 'Phone number not available.');
+    }
+  };
+
+  return (
+    <View style={styles.chatListContainer}>
+      {chats.map(chat => (
+        <TouchableOpacity key={chat.id} onPress={() => onChatPress(chat)} style={styles.chatItem}>
+          <Image source={chat.profilePic} style={styles.chatImage} />
+          <View style={styles.chatContent}>
+            <View style={styles.chatNameContainer}>
+              <Text style={styles.chatName}>{chat.name}</Text>
+              {chat.role && <Text style={styles.teacherTag}>{chat.role}</Text>}
+            </View>
+            <Text style={styles.chatMessage} numberOfLines={1}>{chat.lastMessage || 'Tap to chat'}</Text>
+          </View>
+          <View style={styles.chatRightContainer}>
+            <Text style={styles.chatTime}>{chat.time}</Text>
+            <TouchableOpacity onPress={() => handleCallPress(chat.phone)} style={styles.callButton}>
+              <Ionicons name="call-outline" size={22} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  container: { flex: 1, paddingHorizontal: 15, paddingTop: 20 },
-  header: { fontSize: 32, fontWeight: 'bold', marginBottom: 20 },
-  statusContainer: { marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#555', marginBottom: 10 },
-  statusItem: { alignItems: 'center', marginRight: 20 },
-  statusAvatar: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#007bff' },
-  statusName: { marginTop: 5, fontSize: 12, color: '#333', maxWidth: 60 },
-  chatList: { flex: 1 },
-  chatItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  chatAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-  chatTextContainer: { flex: 1 },
-  chatName: { fontSize: 16, fontWeight: 'bold' },
-  chatLastMessage: { fontSize: 14, color: '#666', marginTop: 2 },
-  chatTimestamp: { fontSize: 12, color: '#999' },
+  updatesContainer: {
+    paddingHorizontal: 15,
+    marginTop: 10,
+  },
+  storiesContainer: {
+    paddingHorizontal: 15,
+    marginTop: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  storyItem: {
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  storyImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  storyBorder: {
+    borderWidth: 3,
+    borderColor: Colors.white,
+  },
+  storyName: {
+    marginTop: 5,
+    fontSize: 12,
+    color: Colors.lightText,
+  },
+  plusIconContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: -5,
+    backgroundColor: 'white',
+    borderRadius: 12,
+  },
+  updatesTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: Colors.white,
+  },
+  chatListContainer: {
+    marginTop: 10,
+  },
+  chatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  chatImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  chatContent: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  chatNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatName: {
+    fontWeight: 'bold',
+    color: Colors.white,
+  },
+  teacherTag: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    color: Colors.white,
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+    overflow: 'hidden',
+  },
+  chatMessage: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  chatRightContainer: {
+    alignItems: 'center',
+  },
+  chatTime: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    marginBottom: 5,
+  },
+  callButton: {
+    padding: 5,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 25,
+    backgroundColor: Colors.gradientPrimary[0],
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginBottom: 15,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: Colors.white,
+    textAlign: 'center',
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    marginTop: 4,
+  },
 });
 
 export default FranchiseeChatsScreen;
-

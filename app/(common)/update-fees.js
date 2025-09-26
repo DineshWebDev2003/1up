@@ -1,26 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
+import Colors from '../constants/colors';
+import authFetch from '../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Mock Data
-const initialStudents = [
-  { id: '1', name: 'John Doe', studentId: 'S001', branch: 'Main Campus', fee: 5000 },
-  { id: '2', name: 'Jane Smith', studentId: 'S002', branch: 'North Campus', fee: 5500 },
-  { id: '3', name: 'Peter Jones', studentId: 'S003', branch: 'Main Campus', fee: 5000 },
-  { id: '4', name: 'Mary Williams', studentId: 'S004', branch: 'East Campus', fee: 4500 },
-  { id: '5', name: 'David Brown', studentId: 'S005', branch: 'North Campus', fee: 5500 },
-  { id: '6', name: 'Linda Davis', studentId: 'S006', branch: 'Main Campus', fee: 5000 },
-];
-
-const branches = ['All', 'Main Campus', 'North Campus', 'East Campus'];
 
 export default function UpdateFeesScreen() {
-  const [students, setStudents] = useState(initialStudents);
-  const [filteredStudents, setFilteredStudents] = useState(initialStudents);
+  const { branch } = useLocalSearchParams();
+  const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [branches, setBranches] = useState(['All']);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('All');
-  const [editingFee, setEditingFee] = useState(null); // { id, amount }
+  const [selectedBranch, setSelectedBranch] = useState(branch || 'All');
+  const [editingFee, setEditingFee] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const sessionToken = await AsyncStorage.getItem('sessionToken');
+        if (sessionToken) {
+          await fetchBranches();
+          await fetchStudents();
+        } else {
+          Alert.alert('Authentication Required', 'Please login again');
+        }
+      } catch (error) {
+        console.error('Authentication check error:', error);
+        Alert.alert('Error', 'Authentication failed. Please login again.');
+      }
+    };
+    loadData();
+  }, []);
+
+  // Refresh data when branch selection changes
+  useEffect(() => {
+    if (selectedBranch) {
+      fetchStudents();
+    }
+  }, [selectedBranch]);
 
   useEffect(() => {
     let result = students;
@@ -31,24 +53,94 @@ export default function UpdateFeesScreen() {
 
     if (searchQuery) {
       result = result.filter(student =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase())
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.student_id.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
     setFilteredStudents(result);
   }, [searchQuery, selectedBranch, students]);
 
-  const handleUpdateFee = () => {
-    if (!editingFee) return;
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const response = await authFetch('/api/fees/fee_crud.php');
+      const result = await response.json();
+      
+      if (result.success) {
+        setStudents(result.data || []);
+        console.log('Fetched students with fees:', result.data);
+      } else {
+        console.error('Failed to fetch students:', result.message);
+        setStudents([]);
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      if (error.message !== 'Unauthorized') {
+        Alert.alert('Error', 'Failed to load students. Please try again.');
+      }
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setStudents(prevStudents =>
-      prevStudents.map(student =>
-        student.id === editingFee.id ? { ...student, fee: parseFloat(editingFee.amount) || 0 } : student
-      )
-    );
+  const fetchBranches = async () => {
+    try {
+      const response = await authFetch('/api/branches/get_branches.php');
+      const result = await response.json();
+      if (result.success) {
+        const branchNames = result.data.map(b => b.name);
+        setBranches(['All', ...branchNames]);
+      }
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+    }
+  };
 
-    Alert.alert('Success', 'Fee updated successfully!');
-    setEditingFee(null);
+  const handleUpdateFee = async () => {
+    if (!editingFee || updating) return;
+
+    const feeAmount = parseFloat(editingFee.amount);
+    if (isNaN(feeAmount) || feeAmount < 0) {
+      Alert.alert('Error', 'Please enter a valid fee amount');
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const response = await authFetch('/api/fees/fee_crud.php', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          student_id: editingFee.id,
+          fee_amount: feeAmount
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // Update local state and refresh data
+        setStudents(prevStudents =>
+          prevStudents.map(student =>
+            student.id === editingFee.id ? { ...student, fee: feeAmount } : student
+          )
+        );
+        // Refresh the data from server to ensure consistency
+        await fetchStudents();
+        Alert.alert('Success', result.message || 'Fee updated successfully!');
+        setEditingFee(null);
+      } else {
+        Alert.alert('Error', result.message || 'Failed to update fee');
+      }
+    } catch (error) {
+      console.error('Error updating fee:', error);
+      Alert.alert('Error', 'Failed to update fee. Please try again.');
+    } finally {
+      setUpdating(false);
+    }
   };
 
     const renderStudentCard = ({ item }) => {
@@ -61,8 +153,8 @@ export default function UpdateFeesScreen() {
           <View style={styles.studentInfoContainer}>
             <Text style={styles.studentName}>{item.name}</Text>
             <View style={styles.idRow}>
-              <MaterialCommunityIcons name="card-account-details-outline" size={16} color="#888" />
-              <Text style={styles.studentId}>{item.studentId}</Text>
+              <MaterialCommunityIcons name="card-account-details-outline" size={16} color={Colors.gray} />
+              <Text style={styles.studentId}>{item.student_id}</Text>
             </View>
             <Text style={styles.branchText}>{item.branch}</Text>
           </View>
@@ -79,29 +171,46 @@ export default function UpdateFeesScreen() {
               autoFocus
             />
           ) : (
-            <TouchableOpacity onPress={() => setEditingFee({ id: item.id, amount: item.fee })}>
-              <Text style={styles.feeAmount}>₹ {item.fee.toFixed(2)}</Text>
+            <TouchableOpacity onPress={() => setEditingFee({ id: item.id, amount: item.fee.toString() })}>
+              <Text style={styles.feeAmount}>INR {item.fee.toFixed(2)}</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {isEditing && (
-          <TouchableOpacity style={styles.saveButton} onPress={handleUpdateFee}>
-            <Text style={styles.saveButtonText}>Save</Text>
+          <TouchableOpacity 
+            style={[styles.saveButton, updating && styles.saveButtonDisabled]} 
+            onPress={handleUpdateFee}
+            disabled={updating}
+          >
+            <Text style={styles.saveButtonText}>
+              {updating ? 'Saving...' : 'Save'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading students...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Update Student Fees</Text>
+        <Text style={styles.title}>Update Student Fees {branch ? `- ${branch}` : ''}</Text>
 
         <View style={styles.controlsContainer}>
           <View style={styles.searchContainer}>
-            <MaterialCommunityIcons name="magnify" size={22} color="#888" style={styles.searchIcon} />
+            <MaterialCommunityIcons name="magnify" size={22} color={Colors.gray} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by student name..."
@@ -115,6 +224,7 @@ export default function UpdateFeesScreen() {
               selectedValue={selectedBranch}
               onValueChange={(itemValue) => setSelectedBranch(itemValue)}
               style={styles.picker}
+              enabled={!branch && branches.length > 1}
             >
               {branches.map(branch => <Picker.Item key={branch} label={branch} value={branch} />)}
             </Picker>
@@ -124,9 +234,15 @@ export default function UpdateFeesScreen() {
         <FlatList
           data={filteredStudents}
           renderItem={renderStudentCard}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={<Text style={styles.emptyText}>No students found.</Text>}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="account-school" size={60} color={Colors.lightText} />
+              <Text style={styles.emptyText}>No students found.</Text>
+              <Text style={styles.emptySubText}>Try adjusting your search or branch filter.</Text>
+            </View>
+          }
         />
       </View>
     </SafeAreaView>
@@ -134,30 +250,35 @@ export default function UpdateFeesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f4f7fc' },
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 20, textAlign: 'center' },
+  safeArea: { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1, padding: 15 },
+  title: { fontSize: 26, fontWeight: 'bold', color: Colors.text, marginBottom: 20, textAlign: 'center' },
   controlsContainer: { marginBottom: 15 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 10, marginBottom: 10, elevation: 2 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: 10, paddingHorizontal: 10, marginBottom: 10, borderWidth: 1, borderColor: Colors.border },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, height: 45, fontSize: 16 },
-  pickerContainer: { backgroundColor: '#fff', borderRadius: 10, elevation: 2, justifyContent: 'center' },
-  picker: { height: 50 },
-  listContainer: { paddingBottom: 20 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 15, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  searchInput: { flex: 1, height: 45, fontSize: 16, color: Colors.text },
+  pickerContainer: { backgroundColor: Colors.card, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center' },
+  picker: { height: 50, color: Colors.text },
+  listContainer: { paddingBottom: 100 },
+  card: { backgroundColor: Colors.card, borderRadius: 12, padding: 15, marginBottom: 15, elevation: 3, shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, borderLeftWidth: 4, borderLeftColor: Colors.primary },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   profilePic: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
   studentInfoContainer: { flex: 1 },
-  studentName: { fontSize: 18, fontWeight: '600', color: '#444' },
+  studentName: { fontSize: 18, fontWeight: '600', color: Colors.text },
   idRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  studentId: { fontSize: 14, color: '#888', marginLeft: 5 },
-  branchText: { fontSize: 15, color: '#666', marginTop: 2 },
-  feeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' },
-  feeLabel: { fontSize: 16, color: '#555', marginRight: 10 },
-  feeAmount: { fontSize: 18, fontWeight: 'bold', color: '#007bff', paddingVertical: 5 },
-  feeInput: { borderBottomWidth: 1, borderColor: '#007bff', fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1, paddingVertical: 5 },
-  saveButton: { backgroundColor: '#28a745', borderRadius: 8, paddingVertical: 10, marginTop: 15, alignItems: 'center' },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  emptyText: { textAlign: 'center', marginTop: 40, fontSize: 16, color: '#888' },
+  studentId: { fontSize: 14, color: Colors.lightText, marginLeft: 5 },
+  branchText: { fontSize: 15, color: Colors.lightText, marginTop: 2 },
+  feeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border },
+  feeLabel: { fontSize: 16, color: Colors.lightText, marginRight: 10 },
+  feeAmount: { fontSize: 18, fontWeight: 'bold', color: Colors.primary, paddingVertical: 5 },
+  feeInput: { borderBottomWidth: 2, borderColor: Colors.primary, fontSize: 18, fontWeight: 'bold', color: Colors.text, flex: 1, paddingVertical: 5 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 10, fontSize: 16, color: Colors.text },
+  saveButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 10, marginTop: 15, alignItems: 'center' },
+  saveButtonDisabled: { backgroundColor: Colors.lightText, opacity: 0.6 },
+  saveButtonText: { color: Colors.white, fontSize: 16, fontWeight: 'bold' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
+  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 18, color: Colors.text, fontWeight: '600' },
+  emptySubText: { textAlign: 'center', marginTop: 5, fontSize: 14, color: Colors.lightText },
 });
 
