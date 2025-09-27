@@ -1,12 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, SafeAreaView, Animated, Dimensions, ImageBackground } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  Image, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  SafeAreaView, 
+  Animated, 
+  Dimensions, 
+  ImageBackground,
+  RefreshControl,
+  Alert,
+  Platform
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
+import Reanimated, { 
+  FadeIn, 
+  FadeOut, 
+  SlideInDown, 
+  SlideInUp,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming
+} from 'react-native-reanimated';
 import VirtualIDCard from '../components/VirtualIDCard';
-import Svg, { Circle } from 'react-native-svg';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import authFetch, { API_URL } from '../utils/api';
 import Colors from '../constants/colors';
 import OnboardingModal from '../components/OnboardingModal';

@@ -23,7 +23,6 @@
     "crypto-js": "^4.2.0",
     "expo": "~54.0.10",
     "expo-av": "~16.0.7",
-    "expo-barcode-scanner": "^13.0.1",
     "expo-blur": "~15.0.7",
     "expo-camera": "~17.0.8",
     "expo-constants": "~18.0.9",
