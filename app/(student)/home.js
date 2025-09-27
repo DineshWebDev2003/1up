@@ -48,17 +48,6 @@ const StudentHomeScreen = () => {
   const [isTimetableExpanded, setTimetableExpanded] = useState(false);
   const [profileCompletion, setProfileCompletion] = useState(0);
 
-  // Add early return for testing
-  if (loading && !studentData) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#8B5CF6' }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={{ color: '#FFFFFF', marginTop: 10, fontSize: 18, fontWeight: 'bold' }}>🔥 Loading Full Student Dashboard...</Text>
-        <Text style={{ color: '#FFFFFF', marginTop: 5, fontSize: 14 }}>Updated Version with All Features</Text>
-      </View>
-    );
-  }
-
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
     return () => clearInterval(timer); // Cleanup on component unmount
@@ -255,12 +244,40 @@ const StudentHomeScreen = () => {
     }
   };
 
+  // Loading and error states
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ color: Colors.primary, marginTop: 10, fontSize: 16, fontWeight: 'bold' }}>Loading Student Dashboard...</Text>
+      </View>
+    );
   }
 
   if (!studentData) {
-    return <View style={styles.centered}><Text>Could not load student data.</Text></View>;
+    return (
+      <View style={styles.centered}>
+        <Text style={{ color: Colors.text, fontSize: 16 }}>Could not load student data.</Text>
+        <TouchableOpacity 
+          style={{ marginTop: 20, padding: 10, backgroundColor: Colors.primary, borderRadius: 8 }}
+          onPress={() => {
+            setLoading(true);
+            const loadData = async () => {
+              const storedUser = await AsyncStorage.getItem('userData');
+              if (storedUser) {
+                const user = JSON.parse(storedUser);
+                fetchData(user);
+              } else {
+                setLoading(false);
+              }
+            };
+            loadData();
+          }}
+        >
+          <Text style={{ color: Colors.white, fontWeight: 'bold' }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (

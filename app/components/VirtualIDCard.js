@@ -1,12 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FlipCard from 'react-native-flip-card';
 import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
 
-const schoolContactNumber = '95149 00070';
+const { width: screenWidth } = Dimensions.get('window');
+
+const schoolContactNumber = '95149 00080';
 
 const VirtualIDCard = ({ student, branchData }) => {
   if (!student) {
@@ -117,9 +119,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
-    height: 200,
-    width: 300,
+    height: 220,
+    width: Math.min(320, screenWidth - 40),
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -134,8 +137,12 @@ const styles = StyleSheet.create({
   },
   schoolName: {
     color: Colors.white,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
+    flex: 1,
+    flexWrap: 'wrap',
+    numberOfLines: 1,
+    ellipsizeMode: 'tail',
   },
   content: {
     flexDirection: 'row',
@@ -153,19 +160,22 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flex: 1,
+    paddingRight: 5,
   },
   studentName: {
     color: '#2D3748',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
-    marginBottom: 3,
-    flexWrap: 'wrap',
+    marginBottom: 4,
+    numberOfLines: 2,
+    ellipsizeMode: 'tail',
   },
   studentInfo: {
     color: '#4A5568',
-    fontSize: 11,
+    fontSize: 10,
     marginBottom: 2,
-    flexWrap: 'wrap',
+    numberOfLines: 1,
+    ellipsizeMode: 'tail',
   },
   footer: {
     marginTop: 8,
@@ -182,14 +192,17 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     color: '#8B5CF6',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     marginLeft: 4,
+    flex: 1,
   },
   contactNumber: {
     color: '#2D3748',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
+    numberOfLines: 1,
+    ellipsizeMode: 'middle',
   },
   // Back side styles
   backHeader: {
@@ -210,9 +223,11 @@ const styles = StyleSheet.create({
   },
   studentIdLabel: {
     color: '#2D3748',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     textAlign: 'center',
+    numberOfLines: 1,
+    ellipsizeMode: 'tail',
   },
   qrContainer: {
     backgroundColor: 'white',
@@ -236,8 +251,10 @@ const styles = StyleSheet.create({
   backContactText: {
     color: '#8B5CF6',
     marginLeft: 4,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
+    numberOfLines: 1,
+    ellipsizeMode: 'middle',
   },
 });
 
