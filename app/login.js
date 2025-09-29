@@ -24,6 +24,7 @@ import * as Animatable from 'react-native-animatable';
 import Colors from './constants/colors';
 import authFetch from './utils/api';
 import { sendPushTokenToServer } from './utils/notifications';
+import GreenGradientBackground from './components/GreenGradientBackground';
 import { clearApiUrlCache } from '../config';
 
 const { width, height } = Dimensions.get('window');
@@ -370,9 +371,7 @@ export default function LoginScreen() {
     );
 
     return (
-        <LinearGradient 
-            colors={Colors.gradientMain}
-            style={styles.container}
+        <GreenGradientBackground
         >
             {/* Modern floating background elements */}
             <View style={styles.backgroundElements}>
@@ -543,7 +542,7 @@ export default function LoginScreen() {
                     </View>
                 </View>
             </Modal>
-        </LinearGradient>
+        </GreenGradientBackground>
     );
 }
 

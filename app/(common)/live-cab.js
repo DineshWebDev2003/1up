@@ -16,9 +16,7 @@ const schoolLocation = {
 import authFetch from '../utils/api';
 import Colors from '../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// New API endpoints
-const API_URL = 'https://example.com/api';
+import { API_URL } from '../../config';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

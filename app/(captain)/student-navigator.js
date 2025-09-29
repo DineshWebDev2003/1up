@@ -82,7 +82,7 @@ const StudentNavigator = () => {
             data={students || []}
             keyExtractor={item => item.id.toString()}
             renderItem={({ item }) => (
-              <View style={styles.studentCard}>
+              <LinearGradient colors={Colors.gradientOrange} style={styles.studentCard}>
                 <Image source={{ uri: item.photo }} style={styles.studentPhoto} />
                 <View style={styles.studentInfo}>
                   <Text style={styles.studentName}>{item.name}</Text>
@@ -99,7 +99,7 @@ const StudentNavigator = () => {
                     <FontAwesome5 name="child" size={20} color={item.pickedUp ? Colors.white : Colors.success} />
                   </TouchableOpacity>
                 </View>
-              </View>
+              </LinearGradient>
             )}
             contentContainerStyle={styles.listContainer}
           />
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   fullScreenButton: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(255,255,255,0.8)', padding: 10, borderRadius: 5 },
   markerPhoto: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: Colors.white },
   listContainer: { padding: 15 },
-  studentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, padding: 15, borderRadius: 10, marginBottom: 10, elevation: 2 },
+  studentCard: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 10, marginBottom: 10, elevation: 2 },
   studentPhoto: { width: 50, height: 50, borderRadius: 25 },
   studentInfo: { flex: 1, marginLeft: 15 },
   studentName: { fontSize: 16, fontWeight: 'bold', color: Colors.text },

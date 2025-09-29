@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Alert, FlatList, StatusBar } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../constants/colors';
 import Profile from '../components/Profile';
 import { LinearGradient } from 'expo-linear-gradient';
+import GreenGradientBackground from '../components/GreenGradientBackground';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authFetch from '../utils/api';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -115,13 +116,18 @@ const AdminHomeScreen = () => {
     setInspirationTranslations(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Modern stat card component
+  // Modern stat card component with proper positioning
   const StatCard = ({ title, value, icon, gradient }) => (
     <View style={styles.statCard}>
       <LinearGradient colors={gradient} style={styles.statCardGradient}>
         <View style={styles.statCardContent}>
-          <MaterialIcons name={icon} size={32} color="rgba(255,255,255,0.9)" />
+          {/* Icon at top center */}
+          <View style={styles.statCardIconContainer}>
+            <MaterialIcons name={icon} size={28} color="rgba(255,255,255,0.9)" />
+          </View>
+          {/* Title below icon */}
           <Text style={styles.statCardTitle}>{title}</Text>
+          {/* Value at bottom center */}
           <Text style={styles.statCardValue}>{value}</Text>
         </View>
       </LinearGradient>
@@ -143,7 +149,8 @@ const AdminHomeScreen = () => {
   // Show login prompt if no session token
   if (!user && !loading) {
     return (
-      <LinearGradient colors={Colors.gradientMain} style={styles.container}>
+      <GreenGradientBackground>
+        <StatusBar backgroundColor={Colors.primary} barStyle="light-content" translucent={false} />
         <View style={styles.loginPromptContainer}>
           <Text style={styles.loginPromptTitle}>Authentication Required</Text>
           <Text style={styles.loginPromptText}>Please log in to access the admin dashboard</Text>
@@ -160,14 +167,15 @@ const AdminHomeScreen = () => {
             <Text style={styles.loginButtonText}>Clear Storage</Text>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </GreenGradientBackground>
     );
   }
 
   console.log('Final user data for Profile component:', user);
 
   return (
-    <LinearGradient colors={Colors.gradientMain} style={styles.container}>
+    <GreenGradientBackground>
+      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" translucent={false} />
       <ScrollView 
         style={[styles.scrollView, { paddingTop: insets.top }]}
         showsVerticalScrollIndicator={false}
@@ -207,75 +215,120 @@ const AdminHomeScreen = () => {
               <View style={styles.statsGrid}>
                 <StatCard title="Total Students" value={stats.total_students || '0'} icon="school" gradient={Colors.gradientSecondary} />
                 <StatCard title="Total Branches" value={stats.total_branches || '0'} icon="business" gradient={Colors.gradientAccent} />
-                <StatCard title="Franchisees" value={stats.total_franchisee || '0'} icon="people" gradient={Colors.gradientSuccess} />
+                <StatCard title="Franchisees" value={stats.total_franchisee || '0'} icon="people" gradient={Colors.gradientSecondary} />
               </View>
             </View>
           )}
         </View>
 
-        {/* Daily Inspiration Section */}
+        {/* Daily Inspiration Section - Compact Horizontal Cards */}
         <View style={styles.inspirationSection}>
-          <Text style={styles.sliderTitle}>Daily Inspiration</Text>
+          <Animatable.View animation="fadeInDown" duration={1000} style={styles.inspirationHeader}>
+            <View style={styles.headerIconContainer}>
+              <MaterialIcons name="auto-awesome" size={24} color={Colors.white} />
+            </View>
+            <Text style={styles.sliderTitle}>Daily Inspiration</Text>
+            <View style={styles.headerDecoration} />
+          </Animatable.View>
+          
           <ScrollView
             ref={inspirationScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={(event) => {
-              const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+              const slideIndex = Math.round(event.nativeEvent.contentOffset.x / (width * 0.9));
               setCurrentSlideIndex(slideIndex);
             }}
-            style={styles.inspirationSlider}
+            style={styles.compactInspirationSlider}
+            contentContainerStyle={{ alignItems: 'center' }}
           >
             {dailyItems.map((item, index) => (
-              <View key={index} style={[styles.inspirationSlide, { width }]}>
-                <LinearGradient 
-                  colors={item.type === 'kural' ? ['#8B5CF6', '#06B6D4'] : ['#F59E0B', '#EF4444']} 
-                  style={styles.inspirationCard}
+              <View key={index} style={[styles.compactInspirationSlide, { width: width * 0.9 }]}>
+                <Animatable.View 
+                  animation="fadeInUp" 
+                  duration={1000}
+                  delay={index * 200}
+                  style={styles.compactInspirationCard}
                 >
-                  <Animatable.View animation="fadeIn" style={styles.inspirationContent}>
-                    {item.type === 'kural' ? (
-                      <>
-                        <Text style={styles.kuralText}>{item.kural_tamil}</Text>
-                        <View style={styles.divider} />
-                        <Text style={styles.explanationText}>{item.explanation_tamil}</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.quoteText}>
-                          {inspirationTranslations[item.id] ? item.quote_ta : item.quote_en}
-                        </Text>
-                        <Text style={styles.authorText}>- {item.author}</Text>
-                        <TouchableOpacity style={styles.translateButton} onPress={() => toggleInspirationTranslation(item.id)}>
-                          <Text style={styles.translateButtonText}>{inspirationTranslations[item.id] ? 'English' : 'தமிழ்'}</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </Animatable.View>
+                  {/* Card Background Gradient */}
+                  <LinearGradient
+                    colors={item.type === 'kural' ? ['#667eea', '#764ba2'] : ['#f093fb', '#f5576c']}
+                    style={styles.compactCardGradientBackground}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  />
                   
-                  {/* Dots inside the card */}
-                  <View style={styles.cardDotsContainer}>
-                    {dailyItems.map((_, dotIndex) => (
-                      <TouchableOpacity
-                        key={dotIndex}
-                        style={[
-                          styles.cardDot,
-                          currentSlideIndex === dotIndex ? styles.activeCardDot : styles.inactiveCardDot
-                        ]}
-                        onPress={() => {
-                          inspirationScrollRef.current?.scrollTo({ x: dotIndex * width, animated: true });
-                          setCurrentSlideIndex(dotIndex);
-                        }}
-                      />
-                    ))}
+                  {/* Card Content Container */}
+                  <View style={styles.compactCardContentContainer}>
+                    {/* Card Header */}
+                    <View style={styles.compactCardHeader}>
+                      <View style={styles.compactIconContainer}>
+                        <MaterialIcons 
+                          name={item.type === 'kural' ? 'menu-book' : 'format-quote'} 
+                          size={20} 
+                          color="rgba(255,255,255,0.9)" 
+                        />
+                      </View>
+                      <Text style={styles.compactCardTypeText}>
+                        {item.type === 'kural' ? 'Thirukkural' : 'Daily Quote'}
+                      </Text>
+                    </View>
+
+                    {/* Card Content */}
+                    <View style={styles.compactContentContainer}>
+                      {item.type === 'kural' ? (
+                        <>
+                          <Text style={styles.compactKuralText}>{item.kural_tamil}</Text>
+                          <Text style={styles.compactExplanationText}>{item.explanation_tamil}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.compactQuoteText}>
+                            {inspirationTranslations[item.id] ? item.quote_ta : item.quote_en}
+                          </Text>
+                          <Text style={styles.compactAuthorText}>- {item.author}</Text>
+                          <TouchableOpacity 
+                            style={styles.compactTranslateButton} 
+                            onPress={() => toggleInspirationTranslation(item.id)}
+                          >
+                            <MaterialIcons 
+                              name="translate" 
+                              size={12} 
+                              color="rgba(255,255,255,0.9)" 
+                            />
+                            <Text style={styles.compactTranslateButtonText}>
+                              {inspirationTranslations[item.id] ? 'EN' : 'தமிழ்'}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
                   </View>
-                </LinearGradient>
+                </Animatable.View>
               </View>
             ))}
           </ScrollView>
+
+          {/* Compact Dots Navigation */}
+          <View style={styles.compactDotsContainer}>
+            {dailyItems.map((_, dotIndex) => (
+              <TouchableOpacity
+                key={dotIndex}
+                style={[
+                  styles.compactDot,
+                  currentSlideIndex === dotIndex ? styles.compactActiveDot : styles.compactInactiveDot
+                ]}
+                onPress={() => {
+                  inspirationScrollRef.current?.scrollTo({ x: dotIndex * (width * 0.9), animated: true });
+                  setCurrentSlideIndex(dotIndex);
+                }}
+              />
+            ))}
+          </View>
         </View>
       </ScrollView>
-    </LinearGradient>
+    </GreenGradientBackground>
   );
 };
 
@@ -386,175 +439,193 @@ const styles = StyleSheet.create({
   statCardGradient: {
     borderRadius: 20,
     padding: 16,
-    minHeight: 120,
+    height: 130,
     justifyContent: 'space-between',
   },
   statCardContent: {
     flex: 1,
     justifyContent: 'space-between',
-  },
-  statCardHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  statCardIconContainer: {
+    marginBottom: 8,
   },
   statCardTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  statCardValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.white,
+    textAlign: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  // Compact Inspiration Section Styles
+  inspirationSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  inspirationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  headerIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  headerDecoration: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginLeft: 12,
+    borderRadius: 1,
+  },
+  compactInspirationSlider: {
+    marginBottom: 16,
+  },
+  compactInspirationSlide: {
+    paddingHorizontal: 8,
+  },
+  compactInspirationCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  compactCardGradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  compactCardContentContainer: {
+    padding: 16,
+    minHeight: 160,
+    justifyContent: 'space-between',
+  },
+  compactCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compactIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  compactCardTypeText: {
     fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
-    marginLeft: 8,
-    flex: 1,
-  },
-  statCardValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.white,
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  
-  // Inspiration Section
-  inspirationSection: {
-    marginTop: 32,
-    paddingHorizontal: 0,
-    marginBottom: 40, // Added margin to avoid tab bar overlap
-  },
-  sliderTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.white,
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 16,
-  },
-  inspirationCard: {
-    borderRadius: 20,
-    padding: 24,
-    minHeight: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 10,
+  compactContentContainer: {
     flex: 1,
-    marginHorizontal: 8,
+    justifyContent: 'flex-start',
   },
-  kuralText: {
-    fontSize: 17,
-    color: 'white',
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-  divider: {
-    height: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    width: '40%',
-    alignSelf: 'center',
-    marginVertical: 16,
-  },
-  explanationText: {
+  compactKuralText: {
     fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.85)',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  quoteText: {
-    fontSize: 20,
-    color: 'white',
-    fontWeight: '700',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginBottom: 16,
-    lineHeight: 30,
-  },
-  authorText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-    marginTop: 8,
-  },
-  translateButton: {
-    marginTop: 20,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  translateButtonText: {
-    color: 'white',
-    fontSize: 14,
     fontWeight: '600',
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 22,
+    marginBottom: 8,
+    flexWrap: 'wrap',
   },
-  
-  // Slider styles
-  inspirationSlider: {
-    height: 220,
+  compactExplanationText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'left',
+    lineHeight: 18,
+    fontStyle: 'italic',
+    flexWrap: 'wrap',
   },
-  inspirationSlide: {
-    paddingHorizontal: 16,
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  compactQuoteText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 20,
+    marginBottom: 6,
+    fontFamily: 'serif',
+    flexWrap: 'wrap',
   },
-  inspirationContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
-  },
-  
-  // Dots styles
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
+  compactAuthorText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontStyle: 'italic',
     marginBottom: 8,
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginHorizontal: 4,
-  },
-  activeDot: {
-    backgroundColor: Colors.primary,
-    transform: [{ scale: 1.2 }],
-  },
-  inactiveDot: {
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
-  },
-  
-  // Card dots (inside inspiration cards)
-  cardDotsContainer: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
+  compactTranslateButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
   },
-  cardDot: {
-    width: 8,
+  compactTranslateButtonText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  // Compact Dots Navigation
+  compactDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingHorizontal: 24,
+  },
+  compactDot: {
     height: 8,
     borderRadius: 4,
-    marginHorizontal: 3,
+    marginHorizontal: 4,
   },
-  activeCardDot: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    transform: [{ scale: 1.3 }],
+  compactActiveDot: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 24,
   },
-  inactiveCardDot: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  compactInactiveDot: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 8,
   },
   loginPromptContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   loginPromptTitle: {
     fontSize: 24,

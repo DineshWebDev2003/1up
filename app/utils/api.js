@@ -46,20 +46,25 @@ const realApi = async (url, options = {}) => {
     }
     
     // Make the actual API call
+    console.log('🚀 Making fetch request to:', `${API_URL}${url}`);
+    
     const response = await fetch(`${API_URL}${url}`, {
       ...options,
       headers,
     });
     
-    console.log('Response status:', response.status);
+    console.log('✅ Response received - Status:', response.status);
+    console.log('📊 Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', errorText);
+      console.error('❌ API Error Response:', errorText);
+      console.error('❌ Response status:', response.status);
+      console.error('❌ Response statusText:', response.statusText);
       
       // If unauthorized, clear stored session data
       if (response.status === 401) {
-        console.log('Unauthorized response - clearing session data');
+        console.log('🔐 Unauthorized response - clearing session data');
         await AsyncStorage.multiRemove(['sessionToken', 'userData', 'userRole']);
       }
       
@@ -69,7 +74,24 @@ const realApi = async (url, options = {}) => {
     return response;
     
   } catch (error) {
-    console.error('Real API Error:', error);
+    console.error('💥 DETAILED API ERROR:');
+    console.error('💥 Error name:', error.name);
+    console.error('💥 Error message:', error.message);
+    console.error('💥 Error stack:', error.stack);
+    console.error('💥 Full error object:', error);
+    console.error('💥 API URL attempted:', `${await getApiUrl()}${url}`);
+    console.error('💥 Request options:', JSON.stringify(options, null, 2));
+    
+    // Check for specific network error types
+    if (error.message === 'Network request failed') {
+      console.error('🌐 NETWORK REQUEST FAILED - Possible causes:');
+      console.error('   1. Server is not running');
+      console.error('   2. Wrong IP address or port');
+      console.error('   3. Firewall blocking connection');
+      console.error('   4. CORS issues');
+      console.error('   5. SSL/TLS certificate issues');
+    }
+    
     throw error;
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, ActivityIndicator, Image, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,13 @@ import * as Animatable from 'react-native-animatable';
 import Profile from '../components/Profile';
 import ModernBackground from '../components/ModernBackground';
 
+// Import local JSON data
+import ThirukkuralData from '../assets/thirukkural.json';
+import InspirationsData from '../assets/inspirations.json';
+
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width * 0.85;
+const CARD_MARGIN = (width - CARD_WIDTH) / 2;
 
 const FranchiseeHomeScreen = () => {
   const [user, setUser] = useState(null);
@@ -21,9 +27,22 @@ const FranchiseeHomeScreen = () => {
     present_today: 0
   });
   const [messages, setMessages] = useState([]);
-  const [thirukkural, setThirukkural] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [inspirationTranslations, setInspirationTranslations] = useState({});
+  const [dailyItems, setDailyItems] = useState([]);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const inspirationScrollRef = useRef(null);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const kuralOfTheDay = { ...ThirukkuralData[dayOfYear % ThirukkuralData.length], type: 'kural', id: 'kural' };
+    const inspirationOfTheDay = { ...InspirationsData[dayOfYear % InspirationsData.length], type: 'inspiration', id: 'inspiration' };
+    
+    // Create array of daily items for manual scrolling
+    const items = [kuralOfTheDay, inspirationOfTheDay];
+    setDailyItems(items);
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,11 +68,10 @@ const FranchiseeHomeScreen = () => {
         const currentUser = JSON.parse(storedUserData);
         setUser(currentUser);
 
-        // Fetch stats, messages, and thirukkural in parallel
-        const [statsResponse, messagesResponse, thirukkuralResponse] = await Promise.all([
+        // Fetch stats and messages in parallel
+        const [statsResponse, messagesResponse] = await Promise.all([
           authFetch(`/api/dashboard/get_stats.php?branch_id=${currentUser.branch_id}`),
-          authFetch('/api/messages/get_messages.php?role=franchisee'),
-          fetch(`${authFetch.defaults.baseURL}/api/misc/get_thirukkural.php`)
+          authFetch('/api/messages/get_messages.php?role=franchisee')
         ]);
 
         const statsResult = await statsResponse.json();
@@ -68,13 +86,6 @@ const FranchiseeHomeScreen = () => {
           setMessages(messagesResult.data || []);
         } else {
           console.error('Failed to fetch messages:', messagesResult.message);
-        }
-
-        const thirukkuralResult = await thirukkuralResponse.json();
-        if (thirukkuralResult.success) {
-          setThirukkural(thirukkuralResult.data);
-        } else {
-          console.error('Failed to fetch Thirukkural:', thirukkuralResult.message);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -109,6 +120,10 @@ const FranchiseeHomeScreen = () => {
       refreshUserData();
     }, [])
   );
+
+  const toggleInspirationTranslation = (id) => {
+    setInspirationTranslations(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   if (loading) {
     return (
@@ -183,28 +198,112 @@ const FranchiseeHomeScreen = () => {
             </View>
           </Animatable.View>
 
-          {/* Thirukkural Section */}
-          <Animatable.View animation="fadeInUp" duration={600} delay={400}>
-            <ImageBackground
-              source={{ uri: 'https://i.pinimg.com/originals/eb/f0/a7/ebf0a721b780969928faeff800276ccd.jpg' }}
-              style={styles.thirukkuralContainer}
-              imageStyle={styles.thirukkuralBackgroundImage}
+          {/* Daily Inspiration Section - Compact Horizontal Cards */}
+          <View style={styles.inspirationSection}>
+            <Animatable.View animation="fadeInDown" duration={1000} style={styles.inspirationHeader}>
+              <View style={styles.headerIconContainer}>
+                <MaterialIcons name="auto-awesome" size={24} color={Colors.white} />
+              </View>
+              <View style={styles.headerDecoration} />
+            </Animatable.View>
+            <Text style={styles.sliderTitle}>Daily Inspiration</Text>
+            
+            <ScrollView
+              ref={inspirationScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(event) => {
+                const slideIndex = Math.round(event.nativeEvent.contentOffset.x / (width * 0.9));
+                setCurrentSlideIndex(slideIndex);
+              }}
+              style={styles.compactInspirationSlider}
+              contentContainerStyle={{ alignItems: 'center' }}
             >
-              <View style={styles.overlay} />
-              <Text style={styles.thirukkuralTitle}>திருக்குறள்</Text>
-              {thirukkural ? (
-                <>
-                  {thirukkural.kural.split('\n').map((line, index) => (
-                    <Text key={index} style={styles.thirukkuralLine}>{line}</Text>
-                  ))}
-                  <View style={styles.divider} />
-                  <Text style={styles.thirukkuralExplanation}>{thirukkural.explanation}</Text>
+              {dailyItems.map((item, index) => (
+                <View key={index} style={[styles.compactInspirationSlide, { width: width * 0.9 }]}>
+                  <Animatable.View 
+                    animation="fadeInUp" 
+                    duration={1000}
+                    delay={index * 200}
+                    style={styles.compactInspirationCard}
+                  >
+                    {/* Card Background Gradient */}
+                    <LinearGradient
+                      colors={item.type === 'kural' ? ['#667eea', '#764ba2'] : ['#f093fb', '#f5576c']}
+                      style={styles.compactCardGradientBackground}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+                    
+                    {/* Card Content Container */}
+                    <View style={styles.compactCardContentContainer}>
+                      {/* Card Header */}
+                      <View style={styles.compactCardHeader}>
+                        <View style={styles.compactIconContainer}>
+                          <MaterialIcons 
+                            name={item.type === 'kural' ? 'menu-book' : 'format-quote'} 
+                            size={20} 
+                            color="rgba(255,255,255,0.9)" 
+                          />
+                        </View>
+                        <Text style={styles.compactCardTypeText}>
+                          {item.type === 'kural' ? 'Thirukkural' : 'Daily Quote'}
+                        </Text>
+                      </View>
+
+                      {/* Card Content */}
+                      <View style={styles.compactContentContainer}>
+                        {item.type === 'kural' ? (
+                          <>
+                            <Text style={styles.compactKuralText}>{item.kural_tamil}</Text>
+                            <Text style={styles.compactExplanationText}>{item.explanation_tamil}</Text>
                 </>
               ) : (
-                <Text style={styles.thirukkuralExplanation}>Could not load inspiration for today.</Text>
-              )}
-            </ImageBackground>
+                          <>
+                            <Text style={styles.compactQuoteText}>
+                              {inspirationTranslations[item.id] ? item.quote_ta : item.quote_en}
+                            </Text>
+                            <Text style={styles.compactAuthorText}>- {item.author}</Text>
+                            <TouchableOpacity 
+                              style={styles.compactTranslateButton} 
+                              onPress={() => toggleInspirationTranslation(item.id)}
+                            >
+                              <MaterialIcons 
+                                name="translate" 
+                                size={12} 
+                                color="rgba(255,255,255,0.9)" 
+                              />
+                              <Text style={styles.compactTranslateButtonText}>
+                                {inspirationTranslations[item.id] ? 'EN' : 'தமிழ்'}
+                              </Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                    </View>
           </Animatable.View>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Compact Dots Navigation */}
+            <View style={styles.compactDotsContainer}>
+              {dailyItems.map((_, dotIndex) => (
+                <TouchableOpacity
+                  key={dotIndex}
+                  style={[
+                    styles.compactDot,
+                    currentSlideIndex === dotIndex ? styles.compactActiveDot : styles.compactInactiveDot
+                  ]}
+                  onPress={() => {
+                    inspirationScrollRef.current?.scrollTo({ x: dotIndex * (width * 0.9), animated: true });
+                    setCurrentSlideIndex(dotIndex);
+                  }}
+                />
+              ))}
+            </View>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </ModernBackground>
@@ -462,6 +561,165 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  // Compact Inspiration Section Styles
+  inspirationSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  inspirationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  headerIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sliderTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.white,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  headerDecoration: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginLeft: 12,
+    borderRadius: 1,
+  },
+  compactInspirationSlider: {
+    marginBottom: 16,
+  },
+  compactInspirationSlide: {
+    paddingHorizontal: 8,
+  },
+  compactInspirationCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  compactCardGradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  compactCardContentContainer: {
+    padding: 16,
+    minHeight: 160,
+    justifyContent: 'space-between',
+  },
+  compactCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compactIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  compactCardTypeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  compactContentContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  compactKuralText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 22,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  compactExplanationText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'left',
+    lineHeight: 18,
+    fontStyle: 'italic',
+    flexWrap: 'wrap',
+  },
+  compactQuoteText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 20,
+    marginBottom: 6,
+    fontFamily: 'serif',
+    flexWrap: 'wrap',
+  },
+  compactAuthorText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  compactTranslateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  compactTranslateButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    marginLeft: 4,
+  },
+  compactDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingHorizontal: 24,
+  },
+  compactDot: {
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+  },
+  compactActiveDot: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 24,
+  },
+  compactInactiveDot: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 8,
   },
 });
 

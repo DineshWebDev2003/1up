@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
 import Colors from '../constants/colors';
-import GreenGradientBackground from '../components/GreenGradientBackground';
+import ModernBackground from '../components/ModernBackground';
 
 const gradients = [
   Colors.gradientPrimary,
@@ -28,11 +28,12 @@ const gradients = [
 
 const actions = [
   { icon: 'camera-outline', title: 'Live Camera', href: '/(common)/live-monitoring' },
-  { icon: 'wallet-outline', title: 'My Fees', href: '/(common)/income-expense' },
+  { icon: 'wallet-outline', title: 'My Fees', href: '/(common)/fees' },
   { icon: 'map-marker-outline', title: 'Track Cab', href: '/(common)/track-cab' },
-  { icon: 'clipboard-check-outline', title: 'Attendance', href: '/(common)/attendance-hub' },
+  // Remove direct Attendance container for students
+  // { icon: 'clipboard-check-outline', title: 'Attendance', href: '/(common)/attendance-hub' },
   { icon: 'credit-card-outline', title: 'Payment History', href: '/(common)/payments-history' },
-  { icon: 'food-apple-outline', title: 'Kids Feed', href: '/(common)/kids-feed' },
+  { icon: 'account-child-outline', title: 'Student Activity', href: '/(common)/kids-feed' },
 ].map((action, index) => ({ 
   ...action, 
   colors: (gradients && Array.isArray(gradients) && gradients.length > 0) 
@@ -113,32 +114,29 @@ const StudentQuickActionScreen = () => {
   };
 
   return (
-    <LinearGradient colors={Colors.gradientMain} style={styles.container}>
-      <Animatable.View animation="fadeIn" duration={800} style={styles.animatedContainer}>
-        <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
-          {/* Header Section */}
-          {/* <Animatable.View animation="fadeInDown" duration={600} style={styles.headerContainer}>
-            <Text style={styles.headerTitle}>Quick Actions</Text>
-            <Text style={styles.headerSubtitle}>Access your student services</Text>
-          </Animatable.View> */}
-
-          {/* Actions List */}
-          <FlatList
-            data={actions.filter(item => item && item.title)}
-            renderItem={({ item, index }) => (
-              <ActionButton
-                action={item}
-                index={index}
-                onPress={() => handlePress(item)}
-              />
-            )}
-            keyExtractor={(item, index) => item?.title || `action-${index}`}
-            contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-          />
-        </SafeAreaView>
-      </Animatable.View>
-    </LinearGradient>
+    <ModernBackground variant="main">
+      <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
+        <FlatList
+          data={actions.filter(item => item && item.title)}
+          renderItem={({ item, index }) => (
+            <ActionButton
+              action={item}
+              index={index}
+              onPress={() => handlePress(item)}
+            />
+          )}
+          keyExtractor={(item, index) => item?.title || `action-${index}`}
+          contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={() => (
+            <Animatable.View animation="fadeInDown" duration={600} style={styles.headerContainer}>
+              <Text style={styles.headerTitle}>Quick Actions</Text>
+              <Text style={styles.headerSubtitle}>Access your student services</Text>
+            </Animatable.View>
+          )}
+        />
+      </SafeAreaView>
+    </ModernBackground>
   );
 };
 

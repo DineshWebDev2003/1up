@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert, Image } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
@@ -44,6 +44,9 @@ export default function StaffAttendanceScreen() {
       if (currentBranchId && currentBranchId !== 'All') {
         url += `&branch_id=${currentBranchId}`;
       }
+      // Add role filter to show only Captain and Teacher roles
+      url += `&roles=Captain,Teacher`;
+      
       const response = await authFetch(url);
       const result = await response.json();
       setStaff(result.success ? result.data : []);
@@ -110,6 +113,16 @@ export default function StaffAttendanceScreen() {
           <View style={styles.staffDetails}>
             <Text style={styles.staffName}>{item.name}</Text>
             <Text style={styles.staffId}>{item.staffId} - {item.branch}</Text>
+            <View style={styles.roleContainer}>
+              <MaterialCommunityIcons 
+                name={item.role === 'Captain' ? 'account-star' : 'account-tie'} 
+                size={16} 
+                color={item.role === 'Captain' ? '#FFD700' : '#4CAF50'} 
+              />
+              <Text style={[styles.roleText, { color: item.role === 'Captain' ? '#FFD700' : '#4CAF50' }]}>
+                {item.role || 'N/A'}
+              </Text>
+            </View>
             <View style={styles.tagContainer}>
               <MaterialCommunityIcons name={item.type === 'QR Code' ? 'qrcode-scan' : 'account-edit-outline'} size={14} color={Colors.lightText} />
               <Text style={styles.attendanceType}>{item.type || 'N/A'}</Text>
@@ -137,6 +150,7 @@ export default function StaffAttendanceScreen() {
         <LottieView source={require('../../assets/lottie/staff.json')} autoPlay loop style={styles.lottie} />
         <Text style={styles.title}>Staff Attendance</Text>
         <Text style={styles.subtitle}>{branch ? `Branch: ${branch}` : 'All Branches'}</Text>
+        <Text style={styles.roleFilter}>Showing: Captain & Teacher Roles</Text>
       </LinearGradient>
       <View style={styles.filtersContainer}>
         {!branch_id && (
@@ -203,6 +217,7 @@ const styles = StyleSheet.create({
   lottie: { width: 130, height: 130, marginBottom: -15 },
   title: { fontSize: 32, fontWeight: 'bold', color: Colors.lightText, textAlign: 'center' },
   subtitle: { fontSize: 16, color: Colors.lightText, opacity: 0.9, marginTop: 4 },
+  roleFilter: { fontSize: 14, color: Colors.lightText, opacity: 0.8, marginTop: 2, fontStyle: 'italic' },
   filtersContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 5 },
   pickerContainer: { flex: 1, backgroundColor: Colors.card, borderRadius: 15, marginRight: 10, ...Platform.select({ ios: { padding: 10, shadowColor: Colors.shadow, shadowRadius: 5, shadowOpacity: 0.1 }, android: { elevation: 3 } }) },
   picker: { height: 50, width: '100%' },
@@ -215,6 +230,8 @@ const styles = StyleSheet.create({
   staffDetails: { marginLeft: 12, flex: 1 },
   staffName: { fontSize: 17, fontWeight: 'bold', color: Colors.lightText },
   staffId: { fontSize: 14, color: Colors.lightText, opacity: 0.9 },
+  roleContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, marginTop: 4, alignSelf: 'flex-start' },
+  roleText: { fontSize: 13, fontWeight: 'bold', marginLeft: 6, textTransform: 'uppercase' },
   tagContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, marginTop: 5, alignSelf: 'flex-start' },
   attendanceType: { fontSize: 12, color: Colors.lightText, marginLeft: 5 },
   attendanceDetails: { alignItems: 'flex-end', marginLeft: 10 },

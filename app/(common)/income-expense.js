@@ -532,10 +532,10 @@ export default function IncomeExpenseScreen() {
   }, [selectedBranch]);
 
   const fetchStudentFees = async () => {
-    if (!loggedInUser?.student_id) return;
+    if (!loggedInUser?.id) return;
     // setLoading(true) is handled by the main useEffect
     try {
-      const response = await authFetch(`/api/fees/get_student_fees.php?student_id=${loggedInUser.student_id}`);
+      const response = await authFetch(`/api/fees/get_student_fees.php?student_id=${loggedInUser.id}`);
       const result = await response.json();
       if (result.success) {
         setStudentFeeData(result.data);

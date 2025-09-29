@@ -15,10 +15,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
 
 const ChatDetailScreen = () => {
-  const { name, userId, id: chatPartnerId, chatPartnerId: altChatPartnerId, avatar } = useLocalSearchParams(); // Get all possible parameter names
-  const actualChatPartnerId = userId || chatPartnerId || altChatPartnerId;
+  const { name, userId, id: chatPartnerId, chatPartnerId: altChatPartnerId, avatar, chatId } = useLocalSearchParams(); // Get all possible parameter names
+  const actualChatPartnerId = chatId || userId || chatPartnerId || altChatPartnerId;
   const decodedName = name ? decodeURIComponent(name) : 'Unknown User';
   const decodedAvatar = avatar ? decodeURIComponent(avatar) : '';
+  
+  console.log('Chat Detail - Received params:', { name, userId, chatPartnerId, altChatPartnerId, avatar, chatId });
+  console.log('Chat Detail - Using chat partner ID:', actualChatPartnerId);
   const router = useRouter();
   const [sections, setSections] = useState([]);
   const [chatPartner, setChatPartner] = useState(null);
@@ -552,14 +555,33 @@ const ChatDetailScreen = () => {
           contentContainerStyle={{ paddingBottom: 20 }}
           stickySectionHeadersEnabled={false}
           inverted={false}
+          getItemLayout={(data, index) => {
+            // Estimate item height for getItemLayout
+            const itemHeight = 80; // Approximate height of each message
+            return {
+              length: itemHeight,
+              offset: itemHeight * index,
+              index,
+            };
+          }}
+          onScrollToIndexFailed={(info) => {
+            // Handle scroll to index failure gracefully
+            console.log('ScrollToIndex failed:', info);
+          }}
           ref={(ref) => {
             if (ref && sections.length > 0) {
               setTimeout(() => {
-                ref.scrollToLocation({
-                  sectionIndex: sections.length - 1,
-                  itemIndex: sections[sections.length - 1]?.data?.length - 1 || 0,
-                  animated: true
-                });
+                try {
+                  ref.scrollToLocation({
+                    sectionIndex: sections.length - 1,
+                    itemIndex: sections[sections.length - 1]?.data?.length - 1 || 0,
+                    animated: true
+                  });
+                } catch (error) {
+                  console.log('ScrollToLocation error:', error);
+                  // Fallback to scrollToEnd
+                  ref.scrollToEnd({ animated: true });
+                }
               }, 100);
             }
           }}

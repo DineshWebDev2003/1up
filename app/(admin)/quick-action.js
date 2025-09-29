@@ -14,18 +14,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
 import Colors from '../constants/colors';
+import GreenGradientBackground from '../components/GreenGradientBackground';
 
 const { width } = Dimensions.get('window');
 
-// Modern gradient colors for different categories
-const categoryGradients = {
-  management: Colors.gradientPrimary || ['#8B5CF6', '#A78BFA'],
-  financial: Colors.gradientSecondary || ['#06B6D4', '#22D3EE'],
-  academic: Colors.gradientAccent || ['#F59E0B', '#FBBF24'],
-  communication: Colors.gradientSuccess || ['#10B981', '#34D399'],
-  monitoring: Colors.gradientInfo || ['#3B82F6', '#60A5FA'],
-  default: Colors.gradientPrimary || ['#8B5CF6', '#A78BFA']
-};
+// Unique attractive gradient colors for each action
+const actionGradients = [
+  ['#667eea', '#764ba2'], // Create Branch - Purple Blue
+  ['#f093fb', '#f5576c'], // Assign User - Pink Red
+  ['#4facfe', '#00f2fe'], // Post Activity - Cyan Blue
+  ['#43e97b', '#38f9d7'], // Manage User - Green Teal
+  ['#fa709a', '#fee140'], // Income & Expense - Pink Yellow
+  ['#a8edea', '#fed6e3'], // Timetable - Mint Pink
+  ['#ff9a9e', '#fecfef'], // Attendance - Rose Pink
+  ['#ffecd2', '#fcb69f'], // Update Fees - Peach Orange
+  ['#a18cd1', '#fbc2eb'], // Live Monitoring - Purple Pink
+  ['#fad0c4', '#ffd1ff'], // Live Cab - Coral Pink
+  ['#ff8a80', '#ff80ab'], // Track Cab - Red Pink
+  ['#84fab0', '#8fd3f4'], // ID Card - Mint Blue
+  ['#ff6b6b', '#feca57'], // Payments History - Red Yellow
+  ['#48cae4', '#023e8a'], // Student Activities - Blue Navy
+  ['#06ffa5', '#3d5a80'], // News Letter - Green Blue
+  ['#ff9a56', '#ff6b9d']  // Generate Invoice - Orange Pink
+];
 
 const actions = [
   { icon: 'store', title: 'Create Branch', route: '/(common)/create-branch', category: 'management', description: 'Set up new branch locations' },
@@ -36,6 +47,7 @@ const actions = [
   { icon: 'schedule', title: 'Timetable', route: '/(common)/timetable', category: 'academic', description: 'Manage class schedules' },
   { icon: 'check-circle', title: 'Attendance', route: '/(common)/attendance-hub', category: 'academic', description: 'Track student presence' },
   { icon: 'payment', title: 'Update Fees', route: '/(common)/fees-update', category: 'financial', description: 'Manage fee structure' },
+  { icon: 'qrcode', title: 'UPI Settings', route: '/(common)/upi-settings', category: 'financial', description: 'Manage UPI for payments' },
   { icon: 'videocam', title: 'Live Monitoring', route: '/(common)/live-monitoring', category: 'monitoring', description: 'Real-time surveillance' },
   { icon: 'directions-bus', title: 'Live Cab', route: '/(common)/live-cab', category: 'monitoring', description: 'Track transportation' },
   { icon: 'location-on', title: 'Track Cab', route: '/(common)/track-cab', category: 'monitoring', description: 'Real-time cab tracking' },
@@ -46,13 +58,13 @@ const actions = [
   { icon: 'receipt', title: 'Generate Invoice', route: '/(common)/generate-invoice', category: 'financial', description: 'Create student invoices' }
 ];
 
-// Process actions with proper error handling
+// Process actions with unique attractive colors
 const processedActions = actions.map((action, index) => {
   if (!action || !action.title) return null;
   
   return { 
     ...action, 
-    colors: categoryGradients[action.category] || categoryGradients.default,
+    colors: actionGradients[index] || actionGradients[0], // Use unique gradient for each action
     id: index.toString()
   };
 }).filter(Boolean);
@@ -107,36 +119,33 @@ const AdminQuickActionScreen = () => {
   };
 
   return (
-    <LinearGradient colors={Colors.gradientMain} style={styles.container}>
-      <Animatable.View animation="fadeIn" duration={800} style={styles.animatedContainer}>
-        <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
-          {/* Header Section */}
-          <Animatable.View animation="fadeInDown" duration={600} style={styles.headerContainer}>
-            <Text style={styles.headerTitle}>Quick Actions</Text>
-            <Text style={styles.headerSubtitle}>Manage your playschool, daycare, and toddler care efficiently</Text>
-          </Animatable.View>
-
-          {/* Actions Grid */}
-          <FlatList
-            data={processedActions}
-            renderItem={({ item, index }) => {
-              if (!item || !item.title) return null;
-              return (
-                <ActionButton
-                  action={item}
-                  index={index}
-                  onPress={() => handlePress(item.route)}
-                />
-              );
-            }}
-            keyExtractor={(item, index) => item?.id || `action-${index}`}
-            contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-            numColumns={1}
-          />
-        </SafeAreaView>
-      </Animatable.View>
-    </LinearGradient>
+    <GreenGradientBackground>
+      <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
+        <FlatList
+          data={processedActions}
+          renderItem={({ item, index }) => {
+            if (!item || !item.title) return null;
+            return (
+              <ActionButton
+                action={item}
+                index={index}
+                onPress={() => handlePress(item.route)}
+              />
+            );
+          }}
+          keyExtractor={(item, index) => item?.id || `action-${index}`}
+          contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+          numColumns={1}
+          ListHeaderComponent={() => (
+            <Animatable.View animation="fadeInDown" duration={600} style={styles.headerContainer}>
+              <Text style={styles.headerTitle}>Quick Actions</Text>
+              <Text style={styles.headerSubtitle}>Manage your playschool, daycare, and toddler care efficiently</Text>
+            </Animatable.View>
+          )}
+        />
+      </SafeAreaView>
+    </GreenGradientBackground>
   );
 };
 

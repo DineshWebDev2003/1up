@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
 import Colors from '../constants/colors';
 import authFetch from '../utils/api';
+import { API_URL } from '../../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { jwtDecode } from 'jwt-decode';
 import { useRouter } from 'expo-router';
@@ -73,12 +74,15 @@ export default function FeesUpdateScreen() {
         }, {});
 
         const feesMap = (feesResult.data && Array.isArray(feesResult.data)) ? feesResult.data.reduce((acc, fee) => {
-          acc[fee.student_user_id] = fee;
+          const key = fee.student_id ?? fee.student_user_id ?? fee.user_id;
+          if (key != null) {
+            acc[key] = fee;
+          }
           return acc;
         }, {}) : {};
 
         const combinedData = (usersResult.data && Array.isArray(usersResult.data)) ? usersResult.data.map(student => {
-          const feeDetails = feesMap[student.id] || { total_fees: '0.00', amount_paid: '0.00' };
+          const feeDetails = feesMap[student.student_id || student.id] || { total_fees: '0.00', amount_paid: '0.00' };
           const total = parseFloat(feeDetails.total_fees);
           const paid = parseFloat(feeDetails.amount_paid);
           const due = total - paid;
@@ -260,13 +264,13 @@ export default function FeesUpdateScreen() {
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
               <Animatable.View animation="fadeInUp" duration={600}>
-                <LinearGradient colors={['#ffffff', '#f0f4f8']} style={styles.studentCard}>
+                <LinearGradient colors={Colors.gradientOrange} style={styles.studentCard}>
                 <Image
                   source={item.profile_image ? { uri: `${API_URL}${item.profile_image}` } : require('../../assets/Avartar.png')}
                   style={styles.studentAvatar}
                 />
                 <View style={styles.studentDetailsContainer}>
-                  <Text style={styles.studentName}>{item.name}</Text>
+                  <Text style={styles.studentName}>{item.name || item.username || item.student_id}</Text>
                   <Text style={styles.branchName}>{item.branch_name}</Text>
                   <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
                     <Text style={styles.statusText}>{item.status}</Text>

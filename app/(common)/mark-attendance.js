@@ -93,7 +93,11 @@ const MarkAttendanceScreen = () => {
     setModalVisible(false);
   };
 
-  const getStatusColors = (status) => status === 'Present' ? [COLORS.secondary, '#79A87D'] : [COLORS.danger, '#E05252'];
+  const getStatusColors = (status) => {
+    if (status === 'Present') return [COLORS.secondary, '#79A87D'];
+    if (status === 'Absent') return [COLORS.danger, '#E05252'];
+    return ['#FF7043', '#FF8A65']; // Orange gradient for unmarked students
+  };
 
   const renderStudentItem = ({ item, index }) => (
     <Animatable.View animation="fadeInUp" duration={800} delay={index * 100}>

@@ -32,7 +32,8 @@
       "expo-router",
       "expo-video",
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "expo-barcode-scanner"
     ],
     "extra": {
       "router": {},

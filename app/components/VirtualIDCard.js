@@ -3,32 +3,57 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'rea
 import { LinearGradient } from 'expo-linear-gradient';
 import FlipCard from 'react-native-flip-card';
 import QRCode from 'react-native-qrcode-svg';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
+import { BlurView } from 'expo-blur';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const schoolContactNumber = '95149 00080';
 
-const VirtualIDCard = ({ student, branchData }) => {
+const VirtualIDCard = ({ student, branchData, isPresent = false, attendanceStatus = 'unknown' }) => {
   if (!student) {
     return null;
   }
 
-  // Determine contact number and label
-  const getContactInfo = () => {
-    if (student.father_number) {
-      return { number: student.father_number, label: 'Father Number' };
-    } else if (branchData?.franchisee_number) {
-      return { number: branchData.franchisee_number, label: 'Franchisee Number' };
-    } else {
-      return { number: schoolContactNumber, label: 'School Number' };
+  const getStatusColor = () => {
+    switch (attendanceStatus) {
+      case 'present': return '#10B981';
+      case 'absent': return '#EF4444';
+      case 'late': return '#F59E0B';
+      default: return '#6B7280';
     }
   };
 
-  const contactInfo = getContactInfo();
-  // Generate proper student ID format: STU + padded ID
-  const studentId = student.studentId || `STU${String(student.id || '000').padStart(3, '0')}`;
+  const getStatusIcon = () => {
+    switch (attendanceStatus) {
+      case 'present': return 'check-circle';
+      case 'absent': return 'cancel';
+      case 'late': return 'schedule';
+      default: return 'help';
+    }
+  };
+
+  // Get school/franchisee number for top
+  const getSchoolNumber = () => {
+    // Prefer dynamic branch contact; avoid hardcoded fallback
+    return branchData?.franchisee_number || branchData?.phone || branchData?.mobile || 'N/A';
+  };
+
+  // Get real student ID from database
+  const getRealStudentId = () => {
+    // Use the actual student_id from database, not the user ID
+    return student.student_id || student.studentId || `TNHK${String(student.id || '000').padStart(5, '0')}`;
+  };
+
+  // Get father's phone number for bottom right
+  const getFatherNumber = () => {
+    return student.father_number || student.father_phone || 'N/A';
+  };
+
+  const schoolNumber = getSchoolNumber();
+  const realStudentId = getRealStudentId();
+  const fatherNumber = getFatherNumber();
 
   return (
     <FlipCard
@@ -40,50 +65,76 @@ const VirtualIDCard = ({ student, branchData }) => {
     >
       {/* Face Side */}
       <View style={styles.card}>
-        {/* Violet Header */}
-        <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.header}>
+        {/* Enhanced Header with School Number */}
+        <LinearGradient colors={['#8B5CF6', '#A855F7', '#06B6D4']} style={styles.header}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} />
-          <Text style={styles.schoolName}>TN Happy Kids Playschool</Text>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.schoolName}>TN Happy Kids Playschool</Text>
+            <Text style={styles.schoolNumber}>📞 {schoolNumber}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
+            <MaterialIcons name={getStatusIcon()} size={12} color="white" />
+          </View>
         </LinearGradient>
         
         <View style={styles.content}>
-          <Image
-            source={student.photo ? { uri: student.photo } : require('../../assets/Avartar.png')}
-            style={styles.profilePic}
-          />
+          <View style={styles.profileContainer}>
+            <Image
+              source={
+                student.avatar_url ? { uri: student.avatar_url } :
+                (student.photo ? { uri: student.photo } : require('../../assets/Avartar.png'))
+              }
+              style={styles.profilePic}
+            />
+            <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
+              <MaterialIcons name={getStatusIcon()} size={10} color="white" />
+            </View>
+          </View>
           <View style={styles.infoContainer}>
-            <Text style={styles.studentName}>{student.name || 'N/A'}</Text>
-            <Text style={styles.studentInfo}>Student ID: {studentId}</Text>
-            <Text style={styles.studentInfo}>Father: {student.father_name || 'N/A'}</Text>
+            <Text style={styles.studentName}>{student.name || student.username || 'N/A'}</Text>
+            <View style={styles.statusRow}>
+              <Text style={styles.studentInfo}>Status: </Text>
+              <Text style={[styles.statusText, { color: getStatusColor() }]}>
+                {attendanceStatus.charAt(0).toUpperCase() + attendanceStatus.slice(1)}
+              </Text>
+            </View>
+            <Text style={styles.studentInfo}>Student ID: {realStudentId}</Text>
+            <Text style={styles.studentInfo}>Father No: {fatherNumber}</Text>
             <Text style={styles.studentInfo}>Class: {student.class_name || student.class || 'N/A'}</Text>
             <Text style={styles.studentInfo}>Branch: {student.branch || branchData?.name || 'N/A'}</Text>
           </View>
         </View>
         
         <View style={styles.footer}>
-          <View style={styles.contactRow}>
-            <Ionicons name="call" size={14} color="#8B5CF6" />
-            <Text style={styles.contactLabel}>{contactInfo.label}:</Text>
+          <View style={styles.footerRow}>
+            <View style={styles.footerLeft}>
+              <Text style={styles.footerLabel}>Student ID:</Text>
+              <Text style={styles.footerValue}>{realStudentId}</Text>
+            </View>
+            <View style={styles.footerRight}>
+              <Text style={styles.footerLabel}>Father No:</Text>
+              <Text style={styles.footerValue}>{fatherNumber}</Text>
+            </View>
           </View>
-          <Text style={styles.contactNumber}>{contactInfo.number}</Text>
         </View>
       </View>
 
       {/* Back Side */}
       <View style={styles.card}>
-        {/* Violet Header */}
-        <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.backHeader}>
+        {/* Enhanced Back Header */}
+        <LinearGradient colors={['#8B5CF6', '#A855F7', '#06B6D4']} style={styles.backHeader}>
           <Text style={styles.backHeaderText}>Student ID Card</Text>
+          <View style={styles.hologramEffect} />
         </LinearGradient>
         
         <View style={styles.backContent}>
-          <Text style={styles.studentIdLabel}>Student ID: {studentId}</Text>
+          <Text style={styles.studentIdLabel}>Student ID: {realStudentId}</Text>
           
           <View style={styles.qrContainer}>
             <QRCode
               value={JSON.stringify({ 
-                student_id: studentId, 
-                name: student.name, 
+                student_id: realStudentId, 
+                name: (student.name || student.username), 
                 branch: student.branch || branchData?.name,
                 school: 'TN Happy Kids Playschool'
               })}
@@ -98,7 +149,7 @@ const VirtualIDCard = ({ student, branchData }) => {
           <View style={styles.backFooter}>
             <View style={styles.contactRow}>
               <Ionicons name="call" size={14} color="#8B5CF6" />
-              <Text style={styles.backContactText}>School: {schoolContactNumber}</Text>
+              <Text style={styles.backContactText}>School: {schoolNumber}</Text>
             </View>
           </View>
         </View>
@@ -135,14 +186,24 @@ const styles = StyleSheet.create({
     height: 30,
     marginRight: 8,
   },
+  headerTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
   schoolName: {
     color: Colors.white,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
-    flex: 1,
-    flexWrap: 'wrap',
     numberOfLines: 1,
     ellipsizeMode: 'tail',
+  },
+  schoolNumber: {
+    color: Colors.white,
+    fontSize: 9,
+    fontWeight: '500',
+    opacity: 0.9,
+    numberOfLines: 1,
+    ellipsizeMode: 'middle',
   },
   content: {
     flexDirection: 'row',
@@ -204,6 +265,32 @@ const styles = StyleSheet.create({
     numberOfLines: 1,
     ellipsizeMode: 'middle',
   },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  footerLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  footerRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  footerLabel: {
+    color: '#8B5CF6',
+    fontSize: 8,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  footerValue: {
+    color: '#2D3748',
+    fontSize: 10,
+    fontWeight: 'bold',
+    numberOfLines: 1,
+    ellipsizeMode: 'middle',
+  },
   // Back side styles
   backHeader: {
     padding: 10,
@@ -255,6 +342,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     numberOfLines: 1,
     ellipsizeMode: 'middle',
+  },
+  // Enhanced styles
+  statusBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  profileContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  hologramEffect: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 30,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 15,
+    transform: [{ rotate: '45deg' }],
   },
 });
 

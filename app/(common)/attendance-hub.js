@@ -8,6 +8,7 @@ import LottieView from 'lottie-react-native';
 import Colors from '../constants/colors';
 import { useFocusEffect } from 'expo-router';
 import authFetch from '../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AttendanceHubScreen = () => {
   const router = useRouter();
@@ -15,15 +16,27 @@ const AttendanceHubScreen = () => {
   const [studentAttendance, setStudentAttendance] = useState({ present: 0, total: 0 });
   const [staffAttendance, setStaffAttendance] = useState({ present: 0, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
+  const [canViewStaffAttendance, setCanViewStaffAttendance] = useState(false);
 
   const fetchStats = async () => {
     try {
       setLoading(true);
+      
+      // Get user role first
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const user = JSON.parse(userData);
+        setUserRole(user.role);
+      }
+      
       const response = await authFetch('/api/dashboard/attendance_hub_stats.php');
       const result = await response.json();
       if (result.success) {
         setStudentAttendance(result.data.student_attendance);
         setStaffAttendance(result.data.staff_attendance);
+        setUserRole(result.data.user_role);
+        setCanViewStaffAttendance(result.data.can_view_staff_attendance);
       } else {
         console.error('Failed to fetch attendance stats');
       }
@@ -46,14 +59,35 @@ const AttendanceHubScreen = () => {
       icon: 'account-group-outline',
       screen: '/(common)/attendance',
       gradient: Colors.gradientPrimary,
+      roles: ['Admin', 'Franchisee', 'Teacher', 'Tuition Teacher'] // All roles can access student attendance
+    },
+    {
+      title: 'Live Monitoring',
+      icon: 'video-wireless-outline',
+      screen: '/(common)/live-monitoring',
+      gradient: Colors.gradientAccent,
+      roles: ['Admin', 'Franchisee', 'Teacher']
+    },
+    {
+      title: 'QR Scanner',
+      icon: 'qrcode-scan',
+      screen: '/(common)/student-qr-scanner',
+      gradient: Colors.gradientSecondary,
+      roles: ['Admin', 'Franchisee', 'Teacher', 'Tuition Teacher'] // All roles can access QR scanner
     },
     {
       title: 'Staff Attendance',
       icon: 'account-tie-outline',
       screen: '/(common)/staff-attendance',
       gradient: Colors.gradientSecondary,
+      roles: ['Admin', 'Franchisee'] // Only Admin and Franchisee can access staff attendance
     },
   ];
+
+  // Filter menu items based on user role
+  const filteredMenuItems = menuItems.filter(item => 
+    userRole && item.roles.includes(userRole)
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -77,15 +111,17 @@ const AttendanceHubScreen = () => {
             <Text style={styles.statLabel}>Student Attendance</Text>
             <Text style={styles.statValue}>{studentAttendance.present} / {studentAttendance.total}</Text>
           </Animatable.View>
-          <Animatable.View animation="zoomIn" duration={700} delay={250} style={styles.statBox}>
-            <MaterialCommunityIcons name="account-tie-outline" size={30} color={Colors.accent} />
-            <Text style={styles.statLabel}>Staff Attendance</Text>
-            <Text style={styles.statValue}>{staffAttendance.present} / {staffAttendance.total}</Text>
-          </Animatable.View>
+          {canViewStaffAttendance && (
+            <Animatable.View animation="zoomIn" duration={700} delay={250} style={styles.statBox}>
+              <MaterialCommunityIcons name="account-tie-outline" size={30} color={Colors.accent} />
+              <Text style={styles.statLabel}>Staff Attendance</Text>
+              <Text style={styles.statValue}>{staffAttendance.present} / {staffAttendance.total}</Text>
+            </Animatable.View>
+          )}
         </View>
 
         <View style={styles.menuContainer}>
-          {menuItems.map((item, index) => (
+          {filteredMenuItems.map((item, index) => (
             <Animatable.View key={index} animation="fadeInUp" duration={800} delay={200 + index * 150}>
               <TouchableOpacity onPress={() => router.push({ pathname: item.screen, params: { branch } })}>
                 <LinearGradient colors={item.gradient} style={styles.button}>
@@ -95,6 +131,15 @@ const AttendanceHubScreen = () => {
               </TouchableOpacity>
             </Animatable.View>
           ))}
+          {filteredMenuItems.length === 0 && (
+            <Animatable.View animation="fadeInUp" duration={800} delay={200}>
+              <View style={styles.noAccessContainer}>
+                <MaterialCommunityIcons name="lock-outline" size={60} color={Colors.primary} />
+                <Text style={styles.noAccessText}>No Attendance Access</Text>
+                <Text style={styles.noAccessSubtext}>Your role doesn't have access to attendance features.</Text>
+              </View>
+            </Animatable.View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -167,6 +212,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginLeft: 15,
+  },
+  noAccessContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  noAccessText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginTop: 15,
+    marginBottom: 8,
+  },
+  noAccessSubtext: {
+    fontSize: 16,
+    color: Colors.darkText,
+    textAlign: 'center',
+    opacity: 0.7,
   },
 });
 

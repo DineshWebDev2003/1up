@@ -39,27 +39,8 @@ import * as Animatable from 'react-native-animatable';
 
 const { width } = Dimensions.get('window');
 
-const mockTimetable = [
-    { time: '09:00 AM', subject: 'Rhymes & Stories', icon: 'musical-notes', color: '#FF9A8B' },
-    { time: '10:00 AM', subject: 'Arts & Craft', icon: 'color-palette', color: '#F7CE68' },
-    { time: '11:00 AM', subject: 'Indoor Play', icon: 'game-controller', color: '#88D8B0' },
-    { time: '12:00 PM', subject: 'Lunch Break', icon: 'restaurant', color: '#FF6B6B' },
-    { time: '01:00 PM', subject: 'Nap Time', icon: 'moon', color: '#A0C4FF' },
-    { time: '02:00 PM', subject: 'Outdoor Play', icon: 'sunny', color: '#FAD02E' },
-];
 
-const authorizedPersons = [
-  { name: 'John Doe', relation: 'Father', avatar: 'https://randomuser.me/api/portraits/men/32.jpg' },
-  { name: 'Jane Doe', relation: 'Mother', avatar: 'https://randomuser.me/api/portraits/women/44.jpg' },
-  { name: 'Jim Beam', relation: 'Guardian', avatar: 'https://randomuser.me/api/portraits/men/36.jpg' },
-];
 
-const thirukkural = {
-  "Line1": "அகர முதல எழுத்தெல்லாம் ஆதி",
-  "Line2": "பகவன் முதற்றே உலகு.",
-  "விளக்கம்": "Just as the letter 'A' is the first of all letters, so the eternal God is the first in the world."
-};
-const kuralLines = [thirukkural.Line1, thirukkural.Line2];
 
 const StudentHomeScreen = () => {
   console.log('🔥 FULL STUDENT HOME COMPONENT LOADING - UPDATED VERSION!');
@@ -71,6 +52,17 @@ const StudentHomeScreen = () => {
   const [isModalVisible, setModalVisible] = useState(false);
   const [isTimetableExpanded, setTimetableExpanded] = useState(false);
   const [profileCompletion, setProfileCompletion] = useState(0);
+  const [todayAttendance, setTodayAttendance] = useState({ status: 'unmarked', inTime: null, outTime: null });
+  const [lastCheckedAt, setLastCheckedAt] = useState(null);
+  
+  // Real data states
+  const [timetable, setTimetable] = useState([]);
+  const [authorizedPersons, setAuthorizedPersons] = useState([]);
+  const [thirukkural, setThirukkural] = useState(null);
+  const [loadingTimetable, setLoadingTimetable] = useState(false);
+  const [loadingAuthorized, setLoadingAuthorized] = useState(false);
+  const [loadingThirukkural, setLoadingThirukkural] = useState(false);
+  
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update time every minute
@@ -96,6 +88,115 @@ const StudentHomeScreen = () => {
       return Math.round((filledFields.length / fields.length) * 100);
     };
 
+  // API functions to fetch real data
+  const fetchTimetable = async (branchId) => {
+    if (!branchId) return;
+    
+    setLoadingTimetable(true);
+    try {
+      const response = await authFetch('/api/timetable/get_timetable.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          branch_id: branchId,
+          date: new Date().toISOString().split('T')[0] // Today's date
+        })
+      });
+
+      if (response.success && response.data) {
+        setTimetable(response.data);
+      } else {
+        console.log('No timetable data found');
+        setTimetable([]);
+      }
+    } catch (error) {
+      console.error('Error fetching timetable:', error);
+      setTimetable([]);
+    } finally {
+      setLoadingTimetable(false);
+    }
+  };
+
+  const fetchAuthorizedPersons = async (studentId) => {
+    if (!studentId) return;
+    
+    setLoadingAuthorized(true);
+    try {
+      const response = await authFetch('/api/students/get_authorized_persons.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          student_id: studentId
+        })
+      });
+
+      if (response.success && response.data) {
+        setAuthorizedPersons(response.data);
+      } else {
+        console.log('No authorized persons found');
+        setAuthorizedPersons([]);
+      }
+    } catch (error) {
+      console.error('Error fetching authorized persons:', error);
+      setAuthorizedPersons([]);
+    } finally {
+      setLoadingAuthorized(false);
+    }
+  };
+
+  const fetchThirukkural = async () => {
+    setLoadingThirukkural(true);
+    try {
+      const response = await authFetch('/api/content/get_thirukkural.php', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.success && response.data) {
+        setThirukkural(response.data);
+      } else {
+        console.log('No thirukkural found');
+        setThirukkural(null);
+      }
+    } catch (error) {
+      console.error('Error fetching thirukkural:', error);
+      setThirukkural(null);
+    } finally {
+      setLoadingThirukkural(false);
+    }
+  };
+
+  const fetchTodayAttendance = async (userId) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await authFetch(`/api/attendance/get_attendance.php?date=${today}&student_id=${userId}`);
+      const result = await response.json();
+      if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+        const rec = result.data[0];
+        setTodayAttendance({
+          status: rec.status || 'unmarked',
+          inTime: rec.check_in_time ? rec.check_in_time.slice(0, 5) : null,
+          outTime: rec.check_out_time ? rec.check_out_time.slice(0, 5) : null,
+          markedBy: rec.marked_by_name,
+          guardianType: rec.guardian_type || null
+        });
+      } else {
+        setTodayAttendance({ status: 'unmarked', inTime: null, outTime: null });
+      }
+    } catch (e) {
+      setTodayAttendance({ status: 'unmarked', inTime: null, outTime: null });
+    } finally {
+      setLastCheckedAt(new Date());
+    }
+  };
+
+
   const fetchData = async (user, isUpdate = false) => {
       console.log('📊 fetchData called with user:', user);
       if (!user) {
@@ -104,96 +205,42 @@ const StudentHomeScreen = () => {
         return;
       }
 
-      // If it's the mock student, load mock data directly
-      if (user.role === 'Student') {
-        // Use existing user data directly (no API call needed)
-        const studentDataWithProfile = {
-          id: user.id,
-          name: user.name,
-          photo: user.profile_image ? 
-            (user.profile_image.startsWith('http') ? user.profile_image : `${API_URL}${user.profile_image}`) :
-            null,
-          father_name: user.father_name || '',
-          father_number: user.father_number || '',
-          mother_name: user.mother_name || '',
-          mother_number: user.mother_number || '',
-          guardian_name: user.guardian_name || '',
-          guardian_number: user.guardian_number || '',
-          blood_group: user.blood_group || '',
-          class_name: user.class_name || 'Student',
-          branch_id: user.branch_id,
-          home_latitude: user.home_latitude || '',
-          home_longitude: user.home_longitude || '',
-          home_address: user.home_address || '',
-          pickup_location_notes: user.pickup_location_notes || ''
-        };
-        
-        const completion = calculateProfileCompletion(studentDataWithProfile);
-        setStudentData(studentDataWithProfile);
-        setProfileCompletion(completion);
-        setBranchName(user.branch_name || 'Branch');
-        
-        if (completion < 100 && !isUpdate) {
-          setModalVisible(true);
-        }
-        console.log('✅ Student data loaded for role Student, setting loading to false');
-        setLoading(false);
-        return;
-      }
-
-      // If it's the mock student, load mock data directly
-      if (user.id === 'mock-student-01') {
-        const mockStudentData = {
-          id: 'mock-student-01',
-          name: 'Balaji',
-          photo: 'https://randomuser.me/api/portraits/men/32.jpg',
-          father_name: 'Murugan',
-          father_number: '9876543210',
-          mother_name: 'Lakshmi',
-          mother_number: '9876543211',
-          guardian_name: 'Suresh',
-          guardian_number: '9876543212',
-          blood_group: 'O+',
-          class_name: 'Playschool',
-          branch_id: 'mock-branch-01',
-          home_latitude: '11.0168',
-          home_longitude: '76.9558',
-          home_address: 'Sample Address, Coimbatore, Tamil Nadu'
-        };
-        const completion = calculateProfileCompletion(mockStudentData);
-        setStudentData(mockStudentData);
-        setProfileCompletion(completion);
-        setBranchName('Mock Branch');
-        if (completion < 100 && !isUpdate) {
-          setModalVisible(true);
-        }
-        setLoading(false);
-        return;
-      }
 
       try {
-        // Use the user data from login since API endpoint doesn't exist
+        // Fetch fresh profile from backend to ensure correct student_id and avatar URL
+        const resp = await authFetch('/api/users/profile_crud.php');
+        const prof = await resp.json();
+        if (!prof.success) throw new Error(prof.message || 'Failed to load profile');
+
+        const p = prof.data || {};
+
+        const avatarUrl = p.avatar_url
+          ? p.avatar_url
+          : (p.avatar ? (p.avatar.startsWith('http') ? p.avatar : `${API_URL}${p.avatar}`)
+                      : (p.profile_image ? (p.profile_image.startsWith('http') ? p.profile_image : `${API_URL}${p.profile_image}`) : null));
+
         const studentDataWithProfile = {
-          id: user.id,
-          name: user.name,
-          photo: user.profile_image ? 
-            (user.profile_image.startsWith('http') ? user.profile_image : `${API_URL}${user.profile_image}`) :
-            null,
+          id: p.id ?? user.id,
+          name: p.name ?? user.name,
+          photo: avatarUrl,
+          student_id: p.student_id ?? user.student_id ?? '',
           father_name: user.father_name || '',
-          father_number: user.father_number || '',
+          father_number: p.father_phone || user.father_number || '',
           mother_name: user.mother_name || '',
-          mother_number: user.mother_number || '',
+          mother_number: p.mother_phone || user.mother_number || '',
           guardian_name: user.guardian_name || '',
-          guardian_number: user.guardian_number || '',
+          guardian_number: p.guardian_phone || user.guardian_number || '',
           blood_group: user.blood_group || '',
-          class_name: user.class_name || 'Student',
-          branch_id: user.branch_id,
+          class_name: p.class || user.class_name || 'Student',
+          branch_id: p.branch_id ?? user.branch_id,
           home_latitude: user.home_latitude || '',
           home_longitude: user.home_longitude || '',
           home_address: user.home_address || '',
-          pickup_location_notes: user.pickup_location_notes || ''
+          pickup_location_notes: user.pickup_location_notes || '',
+          franchisee_number: p.franchisee_number || null,
+          branch_name: p.branch_name || user.branch_name || user.branch || 'Branch'
         };
-        
+
         const completion = calculateProfileCompletion(studentDataWithProfile);
         setStudentData(studentDataWithProfile);
         setProfileCompletion(completion);
@@ -203,7 +250,16 @@ const StudentHomeScreen = () => {
         }
 
         // Set branch name from user data
-        setBranchName(user.branch || 'Branch');
+        setBranchName(studentDataWithProfile.branch_name);
+        
+        // Fetch additional data from APIs
+        await Promise.all([
+          fetchTimetable(user.branch_id),
+          fetchAuthorizedPersons(user.id),
+          fetchThirukkural(),
+          fetchTodayAttendance(user.id)
+        ]);
+        
         console.log('✅ General student data loaded, setting loading to false');
         setLoading(false);
       } catch (error) {
@@ -212,7 +268,7 @@ const StudentHomeScreen = () => {
         setStudentData({
           id: user.id,
           name: user.name || 'Student',
-          photo: user.profile_image || null,
+          photo: user.avatar || null,
           class_name: 'Loading...',
           branch_id: user.branch_id || null
         });
@@ -376,29 +432,47 @@ const StudentHomeScreen = () => {
           />
         </View>
 
+
         
         <TouchableOpacity onPress={() => setTimetableExpanded(!isTimetableExpanded)} activeOpacity={0.8}>
           <View style={styles.timetableContainer}>
               <View style={styles.timetableHeader}>
                   <Text style={styles.sectionHeader}>Today's Timetable</Text>
                   <View style={styles.activityCount}>
-                      <Text style={styles.activityCountText}>{(mockTimetable && Array.isArray(mockTimetable)) ? mockTimetable.length : 0} Activities</Text>
-                      <Ionicons name={isTimetableExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={Colors.text} />
+                      {loadingTimetable ? (
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                      ) : (
+                        <>
+                          <Text style={styles.activityCountText}>{timetable.length} Activities</Text>
+                          <Ionicons name={isTimetableExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={Colors.text} />
+                        </>
+                      )}
                   </View>
               </View>
               {isTimetableExpanded && (
                   <Reanimated.View style={styles.timetableContent} entering={FadeIn.duration(400)} exiting={FadeOut.duration(400)}>
-                      {(mockTimetable && Array.isArray(mockTimetable)) ? mockTimetable.map((item, index) => (
+                      {loadingTimetable ? (
+                        <View style={styles.loadingContainer}>
+                          <ActivityIndicator size="large" color={Colors.primary} />
+                          <Text style={styles.loadingText}>Loading timetable...</Text>
+                        </View>
+                      ) : timetable.length > 0 ? (
+                        timetable.map((item, index) => (
                           <View key={index} style={styles.timetableRow}>
-                              <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
-                                  <Ionicons name={item.icon} size={22} color={Colors.white} />
+                              <View style={[styles.iconContainer, { backgroundColor: item.color || Colors.primary }]}>
+                                  <Ionicons name={item.icon || 'time'} size={22} color={Colors.white} />
                               </View>
                               <View style={styles.timeSubjectContainer}>
-                                  <Text style={styles.timetableSubject}>{item.subject}</Text>
-                                  <Text style={styles.timetableTime}>{item.time}</Text>
+                                  <Text style={styles.timetableSubject}>{item.subject || item.activity_name}</Text>
+                                  <Text style={styles.timetableTime}>{item.time || item.start_time}</Text>
                               </View>
                           </View>
-                      )) : null}
+                        ))
+                      ) : (
+                        <View style={styles.emptyContainer}>
+                          <Text style={styles.emptyText}>No timetable available for today</Text>
+                        </View>
+                      )}
                   </Reanimated.View>
               )}
           </View>
@@ -406,31 +480,52 @@ const StudentHomeScreen = () => {
 
         <View style={styles.authorizedContainer}>
           <Text style={styles.authorizedSectionHeader}>Authorized Person to Receive Student</Text>
-          <View style={styles.personsRow}>
-              {(authorizedPersons && Array.isArray(authorizedPersons)) ? authorizedPersons.map((person, index) => (
-                  <View key={index} style={styles.personContainer}>
-                      <Image source={{ uri: person.avatar }} style={styles.personImage} />
-                      <Text style={styles.personName}>{person.name}</Text>
-                      <Text style={styles.personRelation}>{person.relation}</Text>
+          {loadingAuthorized ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.loadingText}>Loading authorized persons...</Text>
+            </View>
+          ) : (
+            <View style={styles.personsRow}>
+                {authorizedPersons.length > 0 ? authorizedPersons.map((person, index) => (
+                    <View key={index} style={styles.personContainer}>
+                        <Image 
+                          source={person.avatar ? { uri: person.avatar } : require('../../assets/Avartar.png')} 
+                          style={styles.personImage} 
+                        />
+                        <Text style={styles.personName}>{person.name}</Text>
+                        <Text style={styles.personRelation}>{person.relation}</Text>
+                    </View>
+                )) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No authorized persons found</Text>
                   </View>
-              )) : null}
-          </View>
+                )}
+            </View>
+          )}
         </View>
 
-        <Animatable.View animation="fadeInUp" duration={800} delay={400}>
-          <ImageBackground
-            source={{ uri: 'https://i.pinimg.com/originals/eb/f0/a7/ebf0a721b780969928faeff800276ccd.jpg' }}
-            style={styles.thirukkuralContainer}
-            imageStyle={styles.thirukkuralBackgroundImage}
-          >
-            <View style={styles.overlay} />
-            <Text style={styles.thirukkuralTitle}>திருக்குறள்</Text>
-            <Text style={styles.thirukkuralLine}>{kuralLines[0]}</Text>
-            <Text style={styles.thirukkuralLine}>{kuralLines[1]}</Text>
-            <View style={styles.divider} />
-            <Text style={styles.thirukkuralExplanation}>{thirukkural['விளக்கம்']}</Text>
-          </ImageBackground>
-        </Animatable.View>
+        {loadingThirukkural ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Loading Thirukkural...</Text>
+          </View>
+        ) : thirukkural ? (
+          <Animatable.View animation="fadeInUp" duration={800} delay={400}>
+            <ImageBackground
+              source={{ uri: 'https://i.pinimg.com/originals/eb/f0/a7/ebf0a721b780969928faeff800276ccd.jpg' }}
+              style={styles.thirukkuralContainer}
+              imageStyle={styles.thirukkuralBackgroundImage}
+            >
+              <View style={styles.overlay} />
+              <Text style={styles.thirukkuralTitle}>திருக்குறள்</Text>
+              <Text style={styles.thirukkuralLine}>{thirukkural.line1 || thirukkural.Line1}</Text>
+              <Text style={styles.thirukkuralLine}>{thirukkural.line2 || thirukkural.Line2}</Text>
+              <View style={styles.divider} />
+              <Text style={styles.thirukkuralExplanation}>{thirukkural.explanation || thirukkural['விளக்கம்']}</Text>
+            </ImageBackground>
+          </Animatable.View>
+        ) : null}
 
         {/* Spacer to prevent tab bar overlap */}
         <View style={{ height: 120 }} />
@@ -792,6 +887,104 @@ const styles = StyleSheet.create({
   thirukkuralExplanation: {
     fontSize: 13,
     color: Colors.lightText,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  // Live monitoring styles
+  liveMonitoringContainer: {
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  liveMonitoringGradient: {
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  liveMonitoringTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  liveMonitoringSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  liveStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  liveStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 16,
+  },
+  statusItem: {
+    alignItems: 'center',
+  },
+  statusLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  statusValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  refreshButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  lastCheckedText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 8,
     textAlign: 'center',
   },
 });

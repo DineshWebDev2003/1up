@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, Button } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Camera } from 'expo-camera';
 import * as Animatable from 'react-native-animatable';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import authFetch from '../utils/api';
 import Colors from '../constants/colors';
 const Profile = require('../components/Profile').default;
@@ -17,48 +17,63 @@ const TeacherHomeScreen = () => {
   const [loading, setLoading] = useState(true);
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [dailyReport, setDailyReport] = useState('');
-  const [hasPermission, setHasPermission] = useState(null);
-  const [isScannerVisible, setScannerVisible] = useState(false);
-  const [scanned, setScanned] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
+      setLoading(true);
       const storedUser = await AsyncStorage.getItem('userData');
       if (storedUser) {
         const user = JSON.parse(storedUser);
+        console.log('Teacher data loaded:', user);
         setTeacherData(user);
 
         // Fetch dashboard stats
+        console.log('Fetching teacher dashboard stats...');
         const statsResponse = await authFetch('/api/dashboard/teacher_dashboard_stats.php');
         const statsResult = await statsResponse.json();
+        console.log('Stats response:', statsResult);
         if (statsResult.success) {
           setAttendanceStats(statsResult.data);
+          console.log('Attendance stats updated:', statsResult.data);
+        } else {
+          console.error('Failed to fetch stats:', statsResult.message);
+          // Set default values if API fails
+          setAttendanceStats({ total_students: 0, present_students: 0 });
         }
 
         // Fetch clock-in status
+        console.log('Fetching clock-in status...');
         const clockStatusResponse = await authFetch('/api/attendance/staff_attendance.php');
         const clockResult = await clockStatusResponse.json();
+        console.log('Clock status response:', clockResult);
         if (clockResult.success && clockResult.data) {
-          setClockInStatus(clockResult.data);
+          // Check if user is currently clocked in (has clock_in_time but no clock_out_time)
+          if (clockResult.data.clock_in_time && !clockResult.data.clock_out_time) {
+            setClockInStatus({ ...clockResult.data, status: 'clocked_in' });
+          } else {
+            setClockInStatus({ ...clockResult.data, status: 'clocked_out' });
+          }
         } else {
           setClockInStatus(null); // Not clocked in today
         }
+      } else {
+        console.error('No user data found in AsyncStorage');
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
+      // Set default values on error
+      setAttendanceStats({ total_students: 0, present_students: 0 });
     } finally {
       setLoading(false);
     }
   }, []);
 
-    useFocusEffect(fetchData);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
 
   const handleClockIn = async () => {
     try {
@@ -68,12 +83,21 @@ const TeacherHomeScreen = () => {
       });
       const result = await response.json();
       if (result.success) {
-        Alert.alert('Success', 'You have clocked in.');
-        fetchData(); // Refresh data
+        Alert.alert('Success', result.message || 'You have clocked in successfully!');
+        // Immediately update the UI state
+        setClockInStatus(prev => ({
+          ...prev,
+          status: 'clocked_in',
+          clock_in_time: new Date().toISOString(),
+          clock_out_time: null
+        }));
+        // Also refresh data to get latest info
+        fetchData();
       } else {
-        Alert.alert('Error', result.message || 'Failed to clock in.');
+        Alert.alert('Clock-in Failed', result.message || 'You are already clocked in for today.');
       }
     } catch (error) {
+      console.error('Clock-in error:', error);
       Alert.alert('Error', 'An error occurred during clock-in.');
     }
   };
@@ -82,31 +106,6 @@ const TeacherHomeScreen = () => {
     setReportModalVisible(true);
   };
 
-    const handleBarCodeScanned = async ({ type, data }) => {
-    setScanned(true);
-    try {
-      const student = JSON.parse(data);
-      if (student.student_id) {
-        const response = await authFetch('/api/attendance/mark_manual_attendance.php', {
-          method: 'POST',
-          body: JSON.stringify({ student_id: student.student_id, status: 'present' }),
-        });
-        const result = await response.json();
-        if (result.success) {
-          Alert.alert('Success', `${student.name} marked as present.`);
-          fetchData(); // Refresh stats
-        } else {
-          Alert.alert('Error', result.message || 'Failed to mark attendance.');
-        }
-      } else {
-        Alert.alert('Invalid QR Code', 'This QR code does not contain valid student information.');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'An error occurred while processing the QR code.');
-    }
-    setScannerVisible(false);
-    setScanned(false);
-  };
 
   const submitReportAndClockOut = async () => {
     if (!dailyReport.trim()) {
@@ -120,14 +119,23 @@ const TeacherHomeScreen = () => {
       });
       const result = await response.json();
       if (result.success) {
-        Alert.alert('Success', 'You have clocked out.');
+        Alert.alert('Success', 'You have clocked out successfully!');
         setReportModalVisible(false);
         setDailyReport('');
-        fetchData(); // Refresh data
+        // Immediately update the UI state
+        setClockInStatus(prev => ({
+          ...prev,
+          status: 'clocked_out',
+          clock_out_time: new Date().toISOString(),
+          daily_report: dailyReport
+        }));
+        // Also refresh data to get latest info
+        fetchData();
       } else {
-        Alert.alert('Error', result.message || 'Failed to clock out.');
+        Alert.alert('Clock-out Failed', result.message || 'Failed to clock out.');
       }
     } catch (error) {
+      console.error('Clock-out error:', error);
       Alert.alert('Error', 'An error occurred during clock-out.');
     }
   };
@@ -139,24 +147,35 @@ const TeacherHomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {teacherData && (
-          <Profile 
-            name={teacherData.name}
-            role={teacherData.role}
-            branch={teacherData.branch}
-            profileImage={teacherData.avatar ? `${API_URL}${teacherData.avatar}` : null}
-          />
-        )}
+        {/* Profile Section - Always show with fallback data */}
+        <Profile 
+          name={teacherData?.name || 'Teacher'}
+          role={teacherData?.role || 'Teacher'}
+          branch={teacherData?.branch || 'Loading...'}
+          profileImage={teacherData?.avatar ? (
+            teacherData.avatar.startsWith('http') 
+              ? teacherData.avatar 
+              : `${API_URL}${teacherData.avatar}`
+          ) : null}
+        />
+
+        {/* Stats Section with Refresh Button */}
+        <View style={styles.statsHeader}>
+          <Text style={styles.sectionTitle}>Today's Overview</Text>
+          <TouchableOpacity onPress={fetchData} style={styles.refreshButton}>
+            <MaterialCommunityIcons name="refresh" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.statsContainer}>
           <Animatable.View animation="zoomIn" delay={100} style={styles.statCard}>
             <MaterialCommunityIcons name="account-group-outline" size={32} color={Colors.primary} />
-            <Text style={styles.statValue}>{attendanceStats.total_students}</Text>
+            <Text style={styles.statValue}>{attendanceStats.total_students || 0}</Text>
             <Text style={styles.statLabel}>Total Students</Text>
           </Animatable.View>
           <Animatable.View animation="zoomIn" delay={200} style={styles.statCard}>
             <MaterialCommunityIcons name="account-check-outline" size={32} color={Colors.accent} />
-            <Text style={styles.statValue}>{attendanceStats.present_students}</Text>
+            <Text style={styles.statValue}>{attendanceStats.present_students || 0}</Text>
             <Text style={styles.statLabel}>Present Today</Text>
           </Animatable.View>
         </View>
@@ -177,17 +196,19 @@ const TeacherHomeScreen = () => {
             <Text style={styles.clockInTimeText}>
               {clockInStatus.status === 'clocked_in' 
                 ? `Clocked in at ${new Date(clockInStatus.clock_in_time).toLocaleTimeString()}`
-                : `Last clocked out at ${new Date(clockInStatus.clock_out_time).toLocaleTimeString()}`}
+                : clockInStatus.clock_out_time 
+                  ? `Last clocked out at ${new Date(clockInStatus.clock_out_time).toLocaleTimeString()}`
+                  : 'Not clocked in today'}
             </Text>
           )}
         </View>
 
                 <Animatable.View animation="fadeInUp" delay={300} style={styles.actionsGrid}>
-          <TouchableOpacity style={styles.gridButton} onPress={() => setScannerVisible(true)}>
+          <TouchableOpacity style={styles.gridButton} onPress={() => router.push('/(common)/student-qr-scanner')}>
             <MaterialCommunityIcons name="qrcode-scan" size={32} color={Colors.primary} />
             <Text style={styles.gridButtonText}>Scan Attendance</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.gridButton} onPress={() => router.push('/(teacher)/post-activity')}>
+          <TouchableOpacity style={styles.gridButton} onPress={() => router.push('/(common)/post-activity')}>
             <MaterialCommunityIcons name="pencil-plus-outline" size={32} color={Colors.accent} />
             <Text style={styles.gridButtonText}>Post Activity</Text>
           </TouchableOpacity>
@@ -195,16 +216,6 @@ const TeacherHomeScreen = () => {
 
       </ScrollView>
 
-            <Modal visible={isScannerVisible} onRequestClose={() => setScannerVisible(false)}>
-        <Camera 
-          style={StyleSheet.absoluteFillObject} 
-          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        />
-        <View style={styles.scannerOverlay}>
-            <Text style={styles.scannerText}>Scan Student ID Card</Text>
-            <Button title={'Cancel'} onPress={() => setScannerVisible(false)} />
-        </View>
-      </Modal>
 
       <Modal
         visible={isReportModalVisible}
@@ -213,23 +224,27 @@ const TeacherHomeScreen = () => {
         onRequestClose={() => setReportModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Daily Report</Text>
-            <Text style={styles.modalSubtitle}>Please provide a summary of today's activities before clocking out.</Text>
-            <TextInput
-              style={styles.reportInput}
-              multiline
-              placeholder="e.g., Completed Chapter 5, conducted a quiz..."
-              value={dailyReport}
-              onChangeText={setDailyReport}
-            />
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>📝 Daily Report</Text>
+          <Text style={styles.modalSubtitle}>Please provide a summary of today's activities before clocking out.</Text>
+          <TextInput
+            style={styles.reportInput}
+            multiline
+            numberOfLines={4}
+            placeholder="e.g., Completed Chapter 5, conducted a quiz, helped students with homework..."
+            value={dailyReport}
+            onChangeText={setDailyReport}
+            textAlignVertical="top"
+          />
+          <View style={styles.modalButtons}>
             <TouchableOpacity style={styles.submitButton} onPress={submitReportAndClockOut}>
               <Text style={styles.submitButtonText}>Submit & Clock Out</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setReportModalVisible(false)}>
-                <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setReportModalVisible(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -328,21 +343,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: Colors.primary,
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: Colors.textSecondary,
-    textAlign: 'center',
     marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   reportInput: {
     width: '100%',
-    height: 120,
-    backgroundColor: Colors.lightBackground,
+    borderWidth: 1,
+    borderColor: Colors.border,
     borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    marginBottom: 20,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
     padding: 15,
     textAlignVertical: 'top',
     marginBottom: 20,
@@ -352,7 +390,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     padding: 15,
     borderRadius: 10,
-    width: '100%',
+    flex: 1,
+    marginRight: 10,
     alignItems: 'center',
   },
   submitButtonText: {
@@ -360,10 +399,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  cancelText: {
-      marginTop: 15,
-      color: Colors.textSecondary,
-      fontSize: 16
+  cancelButton: {
+    backgroundColor: Colors.lightGray,
+    padding: 15,
+    borderRadius: 10,
+    flex: 1,
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
   },
   postActivityButton: {
     flexDirection: 'row',
@@ -408,19 +455,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  scannerOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scannerText: {
-    fontSize: 24,
-    color: 'white',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 20,
+  refreshButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
   },
 });
 

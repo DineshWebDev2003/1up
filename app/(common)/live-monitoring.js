@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ViewShot from 'react-native-view-shot';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, TextInput, Modal, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, TextInput, Modal, Alert, FlatList, ActivityIndicator } from 'react-native';
 import authFetch from '../utils/api';
 import { Picker } from '@react-native-picker/picker';
 import { Video } from 'expo-av';
@@ -36,6 +36,9 @@ export default function LiveMonitoringScreen() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [branches, setBranches] = useState([]);
+  const [attendanceStatus, setAttendanceStatus] = useState('unknown');
+  const [isPresent, setIsPresent] = useState(false);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
 
   const video = useRef(null);
   const viewShotRefs = useRef(new Map());
@@ -44,6 +47,48 @@ export default function LiveMonitoringScreen() {
   const [editingBranchId, setEditingBranchId] = useState(null);
   const [tempUrl, setTempUrl] = useState('');
   const [playing, setPlaying] = useState(true);
+
+  // Check student attendance status
+  const checkAttendanceStatus = async (studentId, branchId) => {
+    if (!studentId) return;
+    
+    setLoadingAttendance(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await authFetch('/api/attendance/check_student_attendance.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          student_id: studentId,
+          date: today,
+          branch_id: branchId
+        })
+      });
+
+      if (response.success && response.data) {
+        const attendance = response.data;
+        if (attendance.status === 'present' || attendance.status === 'late') {
+          setAttendanceStatus(attendance.status);
+          setIsPresent(true);
+        } else {
+          setAttendanceStatus('absent');
+          setIsPresent(false);
+        }
+      } else {
+        // No attendance record found - student is absent
+        setAttendanceStatus('absent');
+        setIsPresent(false);
+      }
+    } catch (error) {
+      console.error('Error checking attendance:', error);
+      setAttendanceStatus('unknown');
+      setIsPresent(false);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -84,6 +129,11 @@ export default function LiveMonitoringScreen() {
       if (data.success) {
         const branchesData = Array.isArray(data.data) ? data.data : [data.data];
         setBranches(branchesData);
+        
+        // If user is a Student, check their attendance status
+        if (currentUser && currentUser.role === 'Student') {
+          await checkAttendanceStatus(currentUser.id, currentUser.branch_id);
+        }
       } else {
         setBranches([]);
       }
@@ -369,12 +419,41 @@ export default function LiveMonitoringScreen() {
         />
       </LinearGradient>
 
-      <FlatList
-        data={branches}
-        keyExtractor={(item) => item.id.toString()}
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: 40, paddingTop: 20 }}
-        renderItem={({ item }) => {
+      {/* Show absent message for students who are not present */}
+      {user && user.role === 'Student' && !isPresent && !loadingAttendance ? (
+        <View style={styles.absentContainer}>
+          <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.absentGradient}>
+            <Ionicons name="close-circle" size={64} color="white" />
+            <Text style={styles.absentTitle}>You Are Not Present Today</Text>
+            <Text style={styles.absentSubtitle}>
+              Live monitoring is not available as you are marked absent for today.
+            </Text>
+            <Text style={styles.absentStatus}>
+              Status: {attendanceStatus.charAt(0).toUpperCase() + attendanceStatus.slice(1)}
+            </Text>
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={() => checkAttendanceStatus(user.id, user.branch_id)}
+            >
+              <Ionicons name="refresh" size={16} color="white" />
+              <Text style={styles.refreshButtonText}>Check Again</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      ) : loadingAttendance ? (
+        <View style={styles.loadingContainer}>
+          <LinearGradient colors={['#8B5CF6', '#06B6D4']} style={styles.loadingGradient}>
+            <ActivityIndicator size="large" color="white" />
+            <Text style={styles.loadingTitle}>Checking Your Attendance...</Text>
+          </LinearGradient>
+        </View>
+      ) : (
+        <FlatList
+          data={branches}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: 40, paddingTop: 20 }}
+          renderItem={({ item }) => {
           const isEditing = editingBranchId === item.id;
           return (
             <Animatable.View animation="fadeInUp" duration={800} style={styles.videoCard}>
@@ -409,19 +488,22 @@ export default function LiveMonitoringScreen() {
                 )}
 
                 <View style={styles.controlsContainer}>
-                  <TouchableOpacity onPress={() => {
-                    if (isEditing) {
-                      setEditingBranchId(null);
-                      setTempUrl('');
-                    } else {
-                      setEditingBranchId(item.id);
-                      setTempUrl(item.camera_url || '');
-                    }
-                  }}>
-                    <LinearGradient colors={[COLORS.secondary, '#FFEC8B']} style={styles.controlButton}>
-                      <Ionicons name={isEditing ? "close-circle-outline" : "camera-outline"} size={24} color={COLORS.white} />
-                    </LinearGradient>
-                  </TouchableOpacity>
+                  {/* Edit camera only for Admin */}
+                  {user && user.role === 'Admin' && (
+                    <TouchableOpacity onPress={() => {
+                      if (isEditing) {
+                        setEditingBranchId(null);
+                        setTempUrl('');
+                      } else {
+                        setEditingBranchId(item.id);
+                        setTempUrl(item.camera_url || '');
+                      }
+                    }}>
+                      <LinearGradient colors={[COLORS.secondary, '#FFEC8B']} style={styles.controlButton}>
+                        <Ionicons name={isEditing ? "close-circle-outline" : "camera-outline"} size={24} color={COLORS.white} />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
 
                   {item.camera_url && (
                     <TouchableOpacity onPress={() => handleFullscreen(item.camera_url)}>
@@ -431,11 +513,14 @@ export default function LiveMonitoringScreen() {
                     </TouchableOpacity>
                   )}
 
-                                                      <TouchableOpacity onPress={() => sendPushNotification(item.id, item.name)}>
-                    <LinearGradient colors={['#90C695', '#A2D4A5']} style={styles.controlButton}>
-                      <Ionicons name="notifications-outline" size={24} color={COLORS.white} />
-                    </LinearGradient>
-                  </TouchableOpacity>
+                  {/* Bell icon hidden for non-admin */}
+                  {user && user.role === 'Admin' && (
+                    <TouchableOpacity onPress={() => sendPushNotification(item.id, item.name)}>
+                      <LinearGradient colors={['#90C695', '#A2D4A5']} style={styles.controlButton}>
+                        <Ionicons name="notifications-outline" size={24} color={COLORS.white} />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </LinearGradient>
             </Animatable.View>
@@ -448,6 +533,7 @@ export default function LiveMonitoringScreen() {
             </Animatable.View>
         )}
       />
+      )}
 
       <Modal 
         visible={isFullscreen} 
@@ -592,4 +678,88 @@ const styles = StyleSheet.create({
   },
   unsupportedVideoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E0E0E0', borderRadius: 15 },
   unsupportedVideoText: { marginTop: 10, color: COLORS.lightText, fontSize: 16 },
+  
+  // Absent container styles
+  absentContainer: {
+    marginHorizontal: 20,
+    marginTop: 25,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  absentGradient: {
+    borderRadius: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  absentTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 15,
+  },
+  absentSubtitle: {
+    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
+    opacity: 0.9,
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  absentStatus: {
+    fontSize: 14,
+    color: 'white',
+    textAlign: 'center',
+    opacity: 0.8,
+    marginBottom: 25,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  refreshButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  
+  // Loading container styles
+  loadingContainer: {
+    marginHorizontal: 20,
+    marginTop: 25,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  loadingGradient: {
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 15,
+  },
 });

@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
-import { API_URL } from '../../config';
+import authFetch from '../utils/api';
+import { getApiUrl } from '../../config';
+import { usePathname } from 'expo-router';
 
 const MaintenanceOverlay = ({ children }) => {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceDetails, setMaintenanceDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('');
+  const pathname = usePathname();
 
   useEffect(() => {
     const checkUserAndMaintenanceStatus = async () => {
@@ -32,6 +35,8 @@ const MaintenanceOverlay = ({ children }) => {
 
       // If not a developer, check maintenance status
       try {
+        // Use a public, unauthenticated request for maintenance status
+        const API_URL = await getApiUrl();
         const response = await fetch(`${API_URL}/api/maintenance/maintenance_mode.php?check_status=true`);
         const result = await response.json();
         if (result.success && result.data.is_enabled) {
@@ -57,6 +62,11 @@ const MaintenanceOverlay = ({ children }) => {
 
   if (loading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+  }
+
+  // Always allow login/auth flows even during maintenance
+  if (pathname && (pathname.includes('/login') || pathname.includes('auth'))) {
+    return children;
   }
 
   if (isMaintenance) {

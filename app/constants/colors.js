@@ -80,6 +80,7 @@ export default {
   gradientWarm: ['#FEF3C7', '#FDE68A'],              // Warm amber
   gradientCool: ['#ECFDF5', '#D1FAE5'],              // Cool green
   gradientNeutral: ['#F9FAFB', '#F3F4F6'],           // Neutral gray
+  gradientOrange: ['#FF7043', '#FF8A65'],            // Orange gradient for student list
   gradientDark: ['#1F2937', '#374151'],              // Dark theme
   gradientLight: ['#FFFFFF', '#F9FAFB'],             // Light theme
 

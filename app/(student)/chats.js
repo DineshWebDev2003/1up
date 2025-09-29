@@ -130,16 +130,10 @@ const StudentChatScreen = () => {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
           
-          const response = await fetch(`${API_URL}/api/stories/create_story.php`, {
+          const response = await authFetch('/api/stories/create_story.php', {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${sessionToken}`,
-            },
             body: formData,
-            signal: controller.signal,
           });
-          
-          clearTimeout(timeoutId);
           
           console.log('Upload response status:', response.status);
           console.log('Response headers:', response.headers);

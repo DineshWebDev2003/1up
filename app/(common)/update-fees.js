@@ -171,8 +171,10 @@ export default function UpdateFeesScreen() {
               autoFocus
             />
           ) : (
-            <TouchableOpacity onPress={() => setEditingFee({ id: item.id, amount: item.fee.toString() })}>
-              <Text style={styles.feeAmount}>INR {item.fee.toFixed(2)}</Text>
+            <TouchableOpacity onPress={() => setEditingFee({ id: item.id, amount: String(typeof item.fee === 'number' ? item.fee : (Number(item.fee) || 0)) })}>
+              <Text style={styles.feeAmount}>INR {(
+                typeof item.fee === 'number' ? item.fee : (Number(item.fee) || 0)
+              ).toFixed(2)}</Text>
             </TouchableOpacity>
           )}
         </View>

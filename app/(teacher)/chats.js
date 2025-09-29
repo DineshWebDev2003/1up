@@ -103,11 +103,8 @@ const TeacherChatsScreen = () => {
           type: asset.type || (asset.uri.includes('.mp4') ? 'video/mp4' : 'image/jpeg'),
         });
 
-        const response = await fetch(`${API_URL}/api/stories/create_story.php`, {
+        const response = await authFetch('/api/stories/create_story.php', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${await AsyncStorage.getItem('sessionToken')}`,
-          },
           body: formData,
         });
 

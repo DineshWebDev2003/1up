@@ -182,11 +182,8 @@ const ChatScreen = () => {
         });
 
         try {
-          const response = await fetch(`${API_URL}/api/stories/create_story.php`, {
+          const response = await authFetch('/api/stories/create_story.php', {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${await AsyncStorage.getItem('sessionToken')}`,
-            },
             body: formData,
           });
 
@@ -217,9 +214,14 @@ const ChatScreen = () => {
   };
 
   const handleChatPress = (school) => {
+    console.log('Admin Chat - Opening chat with:', school);
     router.push({
       pathname: '/(common)/chat-detail',
-      params: { id: school.id, name: school.name },
+      params: { 
+        chatId: school.id, 
+        name: school.name,
+        avatar: school.profile_pic || ''
+      },
     });
   };
 

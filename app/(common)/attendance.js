@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert, Image, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert, Image, ActivityIndicator, Modal } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
-const LottieView = require('lottie-react-native').default;
-console.log('LottieView component:', LottieView);
+// import LottieView from 'lottie-react-native'; // ✅ COMMENTED OUT - CAUSING ISSUES
+// import DateTimePicker from '@react-native-community/datetimepicker'; // ✅ TEMPORARILY COMMENTED
 import Colors from '../constants/colors';
-import authFetch, { API_URL } from '../utils/api';
+import authFetch from '../utils/api';
+import { API_URL } from '../../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MonthlyAttendance from './monthly-attendance';
 import { Camera } from 'expo-camera';
 
+
 export default function AttendanceScreen() {
   const { branch, branch_id } = useLocalSearchParams();
+  const router = useRouter();
   const [students, setStudents] = useState([]);
   const [branches, setBranches] = useState(['All']);
   const [selectedBranchId, setSelectedBranchId] = useState(branch_id);
@@ -26,6 +29,10 @@ export default function AttendanceScreen() {
   const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [cameraType, setCameraType] = useState('back');
+  const [showGuardianModal, setShowGuardianModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [attendanceStatus, setAttendanceStatus] = useState('present');
+  const [currentUser, setCurrentUser] = useState(null);
 
   const fetchBranches = useCallback(async () => {
     if (branch_id) return; // Don't fetch all branches if a specific one is passed
@@ -69,19 +76,25 @@ export default function AttendanceScreen() {
       const attendanceResult = await attendanceResponse.json();
       const attendanceData = attendanceResult.success ? attendanceResult.data : [];
 
-      // 3. Merge the two lists
-      const attendanceMap = new Map(attendanceData.map(att => [att.id, att]));
+      // 3. Merge the two lists (support id or student_id from API)
+      const attendanceMap = new Map();
+      attendanceData.forEach(att => {
+        if (!att) return;
+        if (att.id != null) attendanceMap.set(att.id, att);
+        if (att.student_id != null) attendanceMap.set(att.student_id, att);
+      });
       
       const mergedStudents = allStudents.map(student => {
-        const attendanceRecord = attendanceMap.get(student.id);
+        const key = student.student_id || student.id;
+        const attendanceRecord = attendanceMap.get(key);
         return {
           ...student,
           status: attendanceRecord ? attendanceRecord.status : 'unmarked', // Default to 'unmarked'
-          inTime: attendanceRecord ? attendanceRecord.inTime : null,
-          outTime: attendanceRecord ? attendanceRecord.outTime : null,
-          inBy: attendanceRecord ? attendanceRecord.inBy : null,
-          outBy: attendanceRecord ? attendanceRecord.outBy : null,
-          type: attendanceRecord ? attendanceRecord.type : 'Manual',
+          inTime: attendanceRecord ? (attendanceRecord.check_in_time ? attendanceRecord.check_in_time.slice(0, 5) : null) : null,
+          outTime: attendanceRecord ? (attendanceRecord.check_out_time ? attendanceRecord.check_out_time.slice(0, 5) : null) : null,
+          inBy: attendanceRecord ? `${attendanceRecord.marked_by_name} (${attendanceRecord.marked_by_role})` : null,
+          outBy: attendanceRecord ? `${attendanceRecord.marked_by_name} (${attendanceRecord.marked_by_role})` : null,
+          type: attendanceRecord ? (attendanceRecord.guardian_type || 'Manual') : 'Manual',
         };
       });
 
@@ -118,6 +131,19 @@ export default function AttendanceScreen() {
     getCameraPermissions();
   }, []);
 
+  // Load current user for marked_by metadata
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      } catch (e) {}
+    };
+    loadUser();
+  }, []);
+
   const onDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || date;
     setShowDatePicker(Platform.OS === 'ios');
@@ -131,7 +157,62 @@ export default function AttendanceScreen() {
         body: JSON.stringify({ 
           student_id: studentId, 
           status: status, 
-          date: date.toISOString().split('T')[0]
+          date: date.toISOString().split('T')[0],
+          marked_by_name: currentUser?.name || currentUser?.username || 'Staff',
+          marked_by_role: currentUser?.role || 'Staff'
+        }),
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        // Update the UI with proper time and type information
+        const currentTime = new Date().toLocaleTimeString().slice(0, 5);
+        setStudents(students.map(student =>
+          student.id === studentId ? { 
+            ...student, 
+            status: status,
+            inTime: status === 'present' ? currentTime : student.inTime,
+            outTime: status === 'absent' ? currentTime : student.outTime,
+            type: 'Manual'
+          } : student
+        ));
+        Alert.alert('Success', `Student marked as ${status}.`);
+        // Refresh to pull authoritative marked_by and guardian_type
+        fetchAttendance(date, selectedBranchId);
+      } else {
+        Alert.alert('Error', result.message || 'Failed to mark attendance.');
+        // Revert optimistic update on error
+        fetchAttendance(date, selectedBranchId);
+      }
+    } catch (error) {
+      console.error('Attendance marking error:', error);
+      Alert.alert('Error', 'An error occurred while marking attendance.');
+      // Revert optimistic update on error
+      fetchAttendance(date, selectedBranchId);
+    }
+  };
+
+  const handleMarkAttendanceWithGuardian = (studentId, status) => {
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+      setSelectedStudent(student);
+      setAttendanceStatus(status);
+      setShowGuardianModal(true);
+    }
+  };
+
+  const handleGuardianSelection = async (guardianType, guardianName) => {
+    try {
+      const response = await authFetch('/api/attendance/mark_manual_attendance.php', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          student_id: selectedStudent.id, 
+          status: attendanceStatus, 
+          date: date.toISOString().split('T')[0],
+          marked_by: guardianName,
+          guardian_type: guardianType,
+          marked_by_name: currentUser?.name || currentUser?.username || 'Staff',
+          marked_by_role: currentUser?.role || 'Staff'
         }),
       });
       const result = await response.json();
@@ -139,14 +220,17 @@ export default function AttendanceScreen() {
       if (result.success) {
         // Optimistically update the UI
         setStudents(students.map(student =>
-          student.id === studentId ? { ...student, status: status } : student
+          student.id === selectedStudent.id ? { ...student, status: attendanceStatus } : student
         ));
-        Alert.alert('Success', `Student marked as ${status}.`);
+        Alert.alert('Success', `${selectedStudent.name} marked as ${attendanceStatus} by ${guardianName}.`);
       } else {
         Alert.alert('Error', result.message || 'Failed to mark attendance.');
       }
     } catch (error) {
       Alert.alert('Error', 'An error occurred.');
+    } finally {
+      setShowGuardianModal(false);
+      setSelectedStudent(null);
     }
   };
 
@@ -154,15 +238,70 @@ export default function AttendanceScreen() {
     if (scanned) return;
     setScanned(true);
     try {
-      const studentId = parseInt(data, 10); // Assuming QR code contains the user_id
-      if (isNaN(studentId)) {
-        Alert.alert('Invalid QR Code', 'This QR code does not contain a valid student ID.');
-        return;
+      let studentId;
+      let studentCode = null;
+      let studentName = 'Student';
+      
+      // Try to parse as JSON first (new format)
+      try {
+        const qrData = JSON.parse(data);
+        if (qrData.student_id) {
+          studentId = qrData.student_id;
+          if (typeof studentId === 'string' && isNaN(parseInt(studentId, 10))) {
+            studentCode = studentId;
+          }
+          studentName = qrData.name || 'Student';
+        } else if (qrData.id) {
+          studentId = qrData.id;
+          studentName = qrData.name || 'Student';
+        } else {
+          throw new Error('Invalid QR data structure');
+        }
+      } catch (jsonError) {
+        // Fallback to integer parsing (old format)
+        studentId = parseInt(data, 10);
+        if (isNaN(studentId)) {
+          Alert.alert('Invalid QR Code', 'This QR code does not contain a valid student ID.');
+          setTimeout(() => setScanned(false), 2000);
+          return;
+        }
       }
-      handleMarkAttendance(studentId, 'present');
+      
+      // Find the student in the current list to update UI immediately
+      const student = students.find(s => (s.id === studentId) || (s.student_id === studentId));
+      if (student) {
+        // Update UI optimistically
+        setStudents(students.map(s => 
+          s.id === studentId ? { ...s, status: 'present', inTime: new Date().toLocaleTimeString().slice(0, 5), type: 'QR Code' } : s
+        ));
+      }
+      
+      // Mark attendance via API (support numeric id or alphanumeric code)
+      authFetch('/api/attendance/mark_manual_attendance.php', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          ...(studentCode ? { student_code: studentCode } : { student_id: studentId }),
+          status: 'present',
+          date: date.toISOString().split('T')[0],
+          marked_by_name: currentUser?.name || currentUser?.username || 'Staff',
+          marked_by_role: currentUser?.role || 'Staff'
+        }),
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (!result.success) {
+          Alert.alert('Error', result.message || 'Failed to mark attendance.');
+        }
+        // Refresh list to show server-calculated in/out and by whom
+        fetchAttendance(date, selectedBranchId);
+      })
+      .catch(() => {
+        Alert.alert('Error', 'Could not mark attendance.');
+      });
       // Allow scanning another code after a short delay
       setTimeout(() => setScanned(false), 2000);
     } catch (error) {
+      console.error('QR Code processing error:', error);
       Alert.alert('Error', 'Could not process the QR code.');
       setTimeout(() => setScanned(false), 2000);
     }
@@ -174,16 +313,20 @@ export default function AttendanceScreen() {
         colors={
           item.status === 'present' ? Colors.gradientSuccess :
           item.status === 'absent' ? Colors.gradientDanger :
-          Colors.gradientNeutral
+          Colors.gradientOrange
         }
         style={styles.studentCard}
       >
                 <View style={{flexDirection: 'row', flex: 1}}>
           <View style={styles.studentInfo}>
-            <Image source={item.avatar ? { uri: `${API_URL}${item.avatar}` } : require('../../assets/Avartar.png')} style={styles.avatar} />
+            <Image source={
+              item.avatar_url ? { uri: item.avatar_url } :
+              (item.avatar ? { uri: `${API_URL}${item.avatar}` } :
+              (item.profile_image ? { uri: `${API_URL}${item.profile_image}` } : require('../../assets/Avartar.png')))
+            } style={styles.avatar} />
             <View style={styles.studentDetails}>
-              <Text style={styles.studentName}>{item.name}</Text>
-              <Text style={styles.studentId}>{item.studentId} - {item.branch}</Text>
+              <Text style={styles.studentName}>{item.name || item.username || item.student_id}</Text>
+              <Text style={styles.studentId}>{(item.student_id || item.id)} - {(item.branch_name || item.branch || '')}</Text>
               <View style={styles.tagContainer}>
                 <MaterialCommunityIcons name={item.type === 'QR Code' ? 'qrcode-scan' : 'account-edit-outline'} size={14} color={Colors.lightText} />
                 <Text style={styles.attendanceType}>{item.type || 'N/A'}</Text>
@@ -193,24 +336,33 @@ export default function AttendanceScreen() {
           <View style={styles.attendanceDetails}>
             <View style={styles.timeEntry}>
               <Text style={styles.timeLabel}>In: {item.inTime || '--:--'}</Text>
-              <Text style={styles.byLabel}>(by {item.inBy || 'N/A'})</Text>
             </View>
             <View style={styles.timeEntry}>
               <Text style={styles.timeLabel}>Out: {item.outTime || '--:--'}</Text>
-              <Text style={styles.byLabel}>(by {item.outBy || 'N/A'})</Text>
             </View>
+            <Text style={styles.summaryText}>
+              {(() => {
+                const rel = item.type || 'Manual';
+                const by = item.inBy || item.outBy || 'N/A';
+                const parts = [];
+                if (item.inTime) parts.push(`In ${item.inTime}`);
+                if (item.outTime) parts.push(`Out ${item.outTime}`);
+                parts.push(`by ${rel}${by && by !== 'N/A' ? ` (${by})` : ''}`);
+                return parts.join(' • ');
+              })()}
+            </Text>
           </View>
         </View>
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity 
             style={[styles.actionButton, styles.inButton, item.status === 'present' && styles.activeButton]}
-            onPress={() => handleMarkAttendance(item.id, 'present')}
+            onPress={() => handleMarkAttendanceWithGuardian(item.id, 'present')}
           >
             <Text style={styles.actionButtonText}>In</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.actionButton, styles.outButton, item.status === 'absent' && styles.activeButton]}
-            onPress={() => handleMarkAttendance(item.id, 'absent')}
+            onPress={() => handleMarkAttendanceWithGuardian(item.id, 'absent')}
           >
             <Text style={styles.actionButtonText}>Out</Text>
           </TouchableOpacity>
@@ -222,9 +374,16 @@ export default function AttendanceScreen() {
   const Header = () => (
     <Animatable.View animation="fadeInDown" duration={800}>
       <LinearGradient colors={Colors.gradient1} style={styles.header}>
-        <LottieView source={require('../../assets/lottie/attendance.json')} autoPlay loop style={styles.lottie} />
+        {/* <LottieView source={require('../../assets/lottie/attendance.json')} autoPlay loop style={styles.lottie} /> */}
         <Text style={styles.title}>Student Attendance</Text>
         <Text style={styles.subtitle}>{branch ? `Branch: ${branch}` : 'All Branches'}</Text>
+        <TouchableOpacity 
+          style={styles.qrScannerButton} 
+          onPress={() => router.push('/(common)/student-qr-scanner')}
+        >
+          <MaterialCommunityIcons name="qrcode-scan" size={24} color={Colors.white} />
+          <Text style={styles.qrScannerButtonText}>QR Scanner</Text>
+        </TouchableOpacity>
       </LinearGradient>
       <View style={styles.filtersContainer}>
         {!branch_id && (
@@ -239,7 +398,7 @@ export default function AttendanceScreen() {
           <Text style={styles.datePickerText}>{date.toLocaleDateString()}</Text>
         </TouchableOpacity>
       </View>
-      {showDatePicker && <DateTimePicker value={date} mode='date' display='default' onChange={onDateChange} />}
+      {/* {showDatePicker && <DateTimePicker value={date} mode='date' display='default' onChange={onDateChange} />} */}
       <View style={styles.modeSelectorContainer}>
         <TouchableOpacity 
           style={[styles.modeButton, attendanceMode === 'manual' && styles.activeModeButton]}
@@ -259,35 +418,14 @@ export default function AttendanceScreen() {
     </Animatable.View>
   );
 
-  if (attendanceMode === 'qr') {
-    if (hasPermission === null) {
-      return <View style={styles.centered}><Text>Requesting for camera permission...</Text></View>;
+  // Navigate to QR scanner when mode toggled, avoid updating state during render
+  useEffect(() => {
+    if (attendanceMode === 'qr') {
+      router.push('/(common)/student-qr-scanner');
+      // Reset back to manual after navigating
+      setTimeout(() => setAttendanceMode('manual'), 0);
     }
-    if (hasPermission === false) {
-      return <View style={styles.centered}><Text>No access to camera. Please enable it in settings.</Text></View>;
-    }
-    return (
-      <SafeAreaView style={styles.safeArea}>
-                <Camera
-          type={cameraType}
-          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.qrHeader}>
-          <Text style={styles.qrTitle}>Scan Student QR Code</Text>
-        </View>
-        {scanned && 
-          <Animatable.View animation="bounceIn" style={styles.scannedOverlay}>
-            <LottieView source={require('../../assets/lottie/success.json')} autoPlay loop={false} style={styles.lottieSuccess} />
-            <Text style={styles.scannedText}>Attendance Marked!</Text>
-          </Animatable.View>
-        }
-        <TouchableOpacity style={styles.switchModeFooter} onPress={() => setAttendanceMode('manual')}>
-          <Text style={styles.switchModeFooterText}>Switch to Manual Entry</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
+  }, [attendanceMode, router]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -301,9 +439,11 @@ export default function AttendanceScreen() {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               {loading ? (
-                <LottieView source={require('../../assets/lottie/loading.json')} autoPlay loop style={styles.lottieEmpty} />
+                <Text>Loading...</Text>
+                // <LottieView source={require('../../assets/lottie/loading.json')} autoPlay loop style={styles.lottieEmpty} />
               ) : (
-                <LottieView source={require('../../assets/lottie/empty.json')} autoPlay loop style={styles.lottieEmpty} />
+                <Text>No Data</Text>
+                // <LottieView source={require('../../assets/lottie/empty.json')} autoPlay loop style={styles.lottieEmpty} />
               )}
               <Text style={styles.emptyText}>{loading ? 'Fetching attendance...' : 'No attendance data found.'}</Text>
             </View>
@@ -326,6 +466,69 @@ export default function AttendanceScreen() {
           onBack={() => setViewMode('daily')}
         />
       )}
+      
+      {/* Guardian Selection Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showGuardianModal}
+        onRequestClose={() => setShowGuardianModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Animatable.View animation="zoomIn" duration={500} style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Who is with {selectedStudent?.name}?</Text>
+            {selectedStudent && [
+              { 
+                person: { 
+                  name: selectedStudent.father_name || selectedStudent.parent_name || 'Father', 
+                  profilePic: selectedStudent.father_photo || selectedStudent.parent_photo 
+                }, 
+                type: 'Father' 
+              },
+              { 
+                person: { 
+                  name: selectedStudent.mother_name || 'Mother', 
+                  profilePic: selectedStudent.mother_photo 
+                }, 
+                type: 'Mother' 
+              },
+              { 
+                person: { 
+                  name: selectedStudent.guardian_name || 'Guardian', 
+                  profilePic: selectedStudent.guardian_photo 
+                }, 
+                type: 'Guardian' 
+              },
+              {
+                person: {
+                  name: 'Captain',
+                  profilePic: null
+                },
+                type: 'Captain'
+              },
+            ].filter(g => g.person.name).map(({ person, type }) => (
+              <TouchableOpacity 
+                key={type} 
+                style={styles.guardianButton} 
+                onPress={() => handleGuardianSelection(type, person.name)}
+              >
+                <Image 
+                  source={person.profilePic ? { uri: `${API_URL}${person.profilePic}` } : require('../../assets/Avartar.png')} 
+                  style={styles.guardianModalAvatar} 
+                />
+                <View>
+                  <Text style={styles.guardianButtonText}>{person.name}</Text>
+                  <Text style={styles.guardianTagText}>{type}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.primary} />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowGuardianModal(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </Animatable.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -397,4 +600,102 @@ const styles = StyleSheet.create({
   scannedText: { fontSize: 22, color: 'white', fontWeight: 'bold', marginTop: 10 },
   switchModeFooter: { position: 'absolute', bottom: 40, alignSelf: 'center', backgroundColor: Colors.primary, paddingHorizontal: 30, paddingVertical: 15, borderRadius: 25 },
   switchModeFooterText: { fontSize: 16, color: 'white', fontWeight: 'bold' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50 },
+  lottieEmpty: { width: 200, height: 200 },
+  emptyText: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center', marginTop: 20 },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.lightText,
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.darkText,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  guardianButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    backgroundColor: Colors.card,
+    borderRadius: 15,
+    marginBottom: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  guardianModalAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 15,
+  },
+  guardianButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.darkText,
+    flex: 1,
+  },
+  guardianTagText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  cancelButton: {
+    backgroundColor: Colors.danger,
+    paddingVertical: 15,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  cancelButtonText: {
+    color: Colors.lightText,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  backButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  qrScannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  qrScannerButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
 });

@@ -98,12 +98,9 @@ const EditProfileScreen = () => {
 
       console.log('Uploading avatar from URI:', imageUri);
 
-            const response = await fetch(`${API_URL}/api/upload_avatar.php`, {
+            const response = await authFetch('/api/upload_avatar.php', {
         method: 'POST',
         body: formData,
-        headers: {
-          'Authorization': `Bearer ${await AsyncStorage.getItem('sessionToken')}`,
-        },
       });
 
       const result = await response.json();

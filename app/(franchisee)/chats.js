@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Image, FlatList, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,7 @@ const FranchiseeChatsScreen = () => {
   const [stories, setStories] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const loadData = async () => {
     setLoading(true);
@@ -115,16 +117,10 @@ const FranchiseeChatsScreen = () => {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
           
-          const response = await fetch(`${API_URL}/api/stories/create_story.php`, {
+          const response = await authFetch('/api/stories/create_story.php', {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${sessionToken}`,
-            },
             body: formData,
-            signal: controller.signal,
           });
-          
-          clearTimeout(timeoutId);
           
           console.log('Upload response status:', response.status);
           console.log('Response headers:', response.headers);
@@ -204,7 +200,7 @@ const FranchiseeChatsScreen = () => {
     <GreenGradientBackground>
       <SafeAreaView style={styles.container}>
         {/* Header with tab bar background */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
           <Text style={styles.headerTitle}>
             {currentUser ? `${currentUser.name} - Chats` : 'Chats'}
           </Text>
@@ -465,7 +461,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 25,
     backgroundColor: Colors.gradientPrimary[0],
     borderBottomLeftRadius: 20,

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ViewShot from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import { LinearGradient } from 'expo-linear-gradient';
-import LottieView from 'lottie-react-native';
+// import LottieView from 'lottie-react-native'; // DISABLED TO FIX ERRORS
 import * as Animatable from 'react-native-animatable';
 import Colors from '../constants/colors';
 
@@ -63,20 +63,45 @@ const MonthlyAttendance = ({ students, date, onBack }) => {
   };
 
   const renderDay = ({ item: dayData, student }) => {
-    // Mock data for status and reason
-    const attendanceData = {
-        status: Math.random() > 0.2 ? 'present' : 'absent',
-        inTime: '09:00 AM',
-        outTime: '05:00 PM',
-        reason: 'Personal leave'
+    // Get real attendance data for this student and day
+    const dayDate = new Date(year, month, dayData.day);
+    const dayDateStr = dayDate.toISOString().split('T')[0];
+    
+    // Find attendance record for this student and date
+    const attendanceRecord = student.attendanceRecords?.find(record => 
+      record.date === dayDateStr
+    );
+    
+    const attendanceData = attendanceRecord ? {
+      status: attendanceRecord.status,
+      inTime: attendanceRecord.check_in_time ? attendanceRecord.check_in_time.slice(0, 5) : '--:--',
+      outTime: attendanceRecord.check_out_time ? attendanceRecord.check_out_time.slice(0, 5) : '--:--',
+      reason: attendanceRecord.remarks || 'No reason provided',
+      markedBy: attendanceRecord.marked_by_name,
+      guardianType: attendanceRecord.guardian_type
+    } : {
+      status: 'unmarked',
+      inTime: '--:--',
+      outTime: '--:--',
+      reason: 'Not marked',
+      markedBy: 'N/A',
+      guardianType: 'N/A'
     };
 
     return (
       <TouchableOpacity style={styles.dayCell} onPress={() => handleDayPress(student.name, dayData.day, attendanceData)}>
         <Ionicons 
-          name={attendanceData.status === 'present' ? "checkmark-circle" : "close-circle"} 
+          name={
+            attendanceData.status === 'present' ? "checkmark-circle" : 
+            attendanceData.status === 'absent' ? "close-circle" : 
+            "ellipse-outline"
+          } 
           size={18} 
-          color={attendanceData.status === 'present' ? Colors.accent : Colors.danger} 
+          color={
+            attendanceData.status === 'present' ? Colors.accent : 
+            attendanceData.status === 'absent' ? Colors.danger : 
+            Colors.textSecondary
+          } 
         />
       </TouchableOpacity>
     );
@@ -108,7 +133,7 @@ const MonthlyAttendance = ({ students, date, onBack }) => {
               <Ionicons name="arrow-back" size={24} color={Colors.white} />
             </TouchableOpacity>
             <View style={styles.headerContent}>
-              <LottieView source={require('../../assets/lottie/attendance.json')} autoPlay loop style={styles.lottie} />
+              {/* <LottieView source={require('../../assets/lottie/attendance.json')} autoPlay loop style={styles.lottie} /> */}
               <Text style={styles.title}>Monthly Attendance</Text>
             </View>
             <TouchableOpacity onPress={handleDownload} style={styles.downloadButton}>
@@ -179,14 +204,13 @@ const MonthlyAttendance = ({ students, date, onBack }) => {
               <View style={styles.modalContent}>
                 <Text style={styles.modalText}><Text style={styles.modalLabel}>Student:</Text> {selectedDayData.studentName}</Text>
                 <Text style={styles.modalText}><Text style={styles.modalLabel}>Date:</Text> {selectedDayData.day}/{month + 1}/{year}</Text>
-                <Text style={styles.modalText}><Text style={styles.modalLabel}>Status:</Text> {selectedDayData.status === 'present' ? 'Present' : 'Absent'}</Text>
-                {selectedDayData.status === 'present' ? (
-                  <>
-                    <Text style={styles.modalText}><Text style={styles.modalLabel}>In-Time:</Text> {selectedDayData.inTime}</Text>
-                    <Text style={styles.modalText}><Text style={styles.modalLabel}>Out-Time:</Text> {selectedDayData.outTime}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.modalText}><Text style={styles.modalLabel}>Reason:</Text> {selectedDayData.reason}</Text>
+                <Text style={styles.modalText}><Text style={styles.modalLabel}>Status:</Text> {selectedDayData.status === 'present' ? 'Present' : selectedDayData.status === 'absent' ? 'Absent' : 'Unmarked'}</Text>
+                <Text style={styles.modalText}><Text style={styles.modalLabel}>In-Time:</Text> {selectedDayData.inTime}</Text>
+                <Text style={styles.modalText}><Text style={styles.modalLabel}>Out-Time:</Text> {selectedDayData.outTime}</Text>
+                <Text style={styles.modalText}><Text style={styles.modalLabel}>Marked By:</Text> {selectedDayData.markedBy}</Text>
+                <Text style={styles.modalText}><Text style={styles.modalLabel}>Guardian Type:</Text> {selectedDayData.guardianType}</Text>
+                {selectedDayData.reason && selectedDayData.reason !== 'Not marked' && (
+                  <Text style={styles.modalText}><Text style={styles.modalLabel}>Remarks:</Text> {selectedDayData.reason}</Text>
                 )}
               </View>
             )}

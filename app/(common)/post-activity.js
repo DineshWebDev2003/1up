@@ -35,10 +35,17 @@ const PostActivityScreen = () => {
     if (!currentBranchId) return;
     setIsLoadingStudents(true);
     try {
-      const response = await authFetch(`/api/users/get_users.php?role=Student&branch_id=${currentBranchId}`);
+      // Use the students API instead of users API for better data consistency
+      const response = await authFetch(`/api/students/get_students.php?branch_id=${currentBranchId}`);
       const result = await response.json();
-      setStudents(result.success ? result.data : []);
+      if (result.success) {
+        setStudents(result.data || []);
+      } else {
+        console.error('Failed to fetch students:', result.message);
+        setStudents([]);
+      }
     } catch (error) {
+      console.error('Error fetching students:', error);
       Alert.alert('Error', 'An error occurred while fetching students.');
       setStudents([]);
     } finally {
@@ -165,20 +172,16 @@ const PostActivityScreen = () => {
         }, 200);
         
         try {
-          const sessionToken = await AsyncStorage.getItem('sessionToken');
-          console.log('Uploading media to:', `${API_URL}/api/upload_media.php`);
+          console.log('Uploading media to:', `/api/upload_media.php`);
           console.log('Media file info:', {
             uri: media.uri,
             type: media.type === 'video' ? 'video/mp4' : 'image/jpeg',
             name: media.type === 'video' ? 'video.mp4' : 'image.jpg'
           });
           
-          const uploadResponse = await fetch(`${API_URL}/api/upload_media.php`, {
+          const uploadResponse = await authFetch('/api/upload_media.php', {
             method: 'POST',
             body: formData,
-            headers: {
-              'Authorization': `Bearer ${sessionToken}`,
-            },
           });
           
           clearInterval(progressInterval);
@@ -298,7 +301,7 @@ const PostActivityScreen = () => {
                   onPress={() => setSelectedStudentId(item.id)}
                 >
                   <Image 
-                    source={require('../../assets/Avartar.png')} 
+                    source={item.avatar ? { uri: `${API_URL}${item.avatar}` } : require('../../assets/Avartar.png')} 
                     style={styles.studentPhoto}
                   />
                   <Text style={styles.studentName} numberOfLines={2}>{item.name}</Text>
