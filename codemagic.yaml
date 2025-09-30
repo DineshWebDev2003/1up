@@ -25,7 +25,7 @@ workflows:
       node: 20
       java: 17
       vars:
-        APP_DIR: tn-happykids-playschool
+        APP_DIR: .
     cache:
       cache_paths:
         - ~/.npm
@@ -61,16 +61,11 @@ workflows:
           else
             echo "WARNING: CM_KEYSTORE not set. Build will be unsigned."
           fi
-      - name: Build Android App Bundle (AAB)
+      - name: Build Android APK (release)
         script: |
           cd "$APP_DIR/android"
-          ./gradlew clean bundleRelease --no-daemon
-      - name: Build Android APK (optional)
-        script: |
-          cd "$APP_DIR/android"
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew clean assembleRelease --no-daemon
     artifacts:
-      - "$APP_DIR/android/app/build/outputs/**/*.aab"
       - "$APP_DIR/android/app/build/outputs/**/*.apk"
     publishing:
       email:
