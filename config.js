@@ -2,7 +2,7 @@
 // Update these URLs to match your server configuration
 
 // Production server configuration
-const PRODUCTION_API_URL = 'http://10.216.219.139/lastchapter';
+const PRODUCTION_API_URL = 'https://appv5.tnhappykids.in/lastchapter';
 
 // Get the current server URL from environment or use production default
 const getServerURL = () => {
@@ -71,3 +71,20 @@ export const BASE_URL = DEFAULT_BASE_URL;
 // 
 // Production URL (currently active):
 // https://appv5.tnhappykids.in/lastchapter
+
+// Web pages configuration
+export const WEB_CONFIG = {
+  // Base API URL for web pages (PHP)
+  API_BASE_URL: 'https://appv5.tnhappykids.in/lastchapter',
+  
+  // Alternative URLs for different environments
+  DEVELOPMENT: 'http://localhost/lastchapter',
+  PRODUCTION: 'https://appv5.tnhappykids.in/lastchapter',
+  LIVE: 'https://appv5.tnhappykids.in/lastchapter',
+  
+  // Web pages base URL
+  WEB_BASE_URL: 'https://appv5.tnhappykids.in/lastchapter/tn-happykids-playschool/web',
+  
+  // Login redirect URL
+  LOGIN_URL: 'https://appv5.tnhappykids.in/lastchapter/tn-happykids-playschool/web/login.php'
+};

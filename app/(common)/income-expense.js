@@ -171,7 +171,7 @@ const HomeScreen = ({ totalIncome, totalExpense, netBalance, sharePercentage, on
   <ScrollView style={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
     <View style={styles.dateRangeContainer}>
       <TouchableOpacity onPress={() => setShowHomeStartDatePicker(true)} style={styles.datePickerButton}>
-        <Text>Start: {homeStartDate.toLocaleDateDateString('en-GB')}</Text>
+        <Text>Start: {homeStartDate.toLocaleDateString('en-GB')}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => setShowHomeEndDatePicker(true)} style={styles.datePickerButton}>
         <Text>End: {homeEndDate.toLocaleDateString('en-GB')}</Text>

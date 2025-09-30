@@ -109,6 +109,9 @@ const StudentQuickActionScreen = () => {
     if (action.title === 'Live Camera') {
       params.branch_id = studentData.branch_id;
     }
+    if (action.title === 'Payment History') {
+      params.student_id = studentData.id; // ensure API filters to this student
+    }
 
     router.push({ pathname: action.href, params });
   };

@@ -175,6 +175,24 @@ const StudentHomeScreen = () => {
   const fetchTodayAttendance = async (userId) => {
     try {
       const today = new Date().toISOString().split('T')[0];
+      // Prefer new_attendance for live status
+      try {
+        const respNew = await authFetch(`/api/attendance/get_new_attendance.php?date=${today}&user_id=${userId}`);
+        const resNew = await respNew.json();
+        if (resNew.success && Array.isArray(resNew.data) && resNew.data.length > 0) {
+          const rec = resNew.data[0];
+          setTodayAttendance({
+            status: rec.status || 'unmarked',
+            inTime: rec.in_time ? rec.in_time.slice(0, 5) : null,
+            outTime: rec.out_time ? rec.out_time.slice(0, 5) : null,
+            markedBy: rec.in_by || rec.out_by || null,
+            guardianType: rec.in_guardian_type || rec.out_guardian_type || null
+          });
+          return;
+        }
+      } catch (e) {
+        // fallback to old attendance below
+      }
       const response = await authFetch(`/api/attendance/get_attendance.php?date=${today}&student_id=${userId}`);
       const result = await response.json();
       if (result.success && Array.isArray(result.data) && result.data.length > 0) {
@@ -223,6 +241,7 @@ const StudentHomeScreen = () => {
           id: p.id ?? user.id,
           name: p.name ?? user.name,
           photo: avatarUrl,
+          // Prefer students.student_id surfaced by profile_crud
           student_id: p.student_id ?? user.student_id ?? '',
           father_name: user.father_name || '',
           father_number: p.father_phone || user.father_number || '',
@@ -245,16 +264,12 @@ const StudentHomeScreen = () => {
         setStudentData(studentDataWithProfile);
         setProfileCompletion(completion);
 
-        if (completion < 100 && !isUpdate) {
-          setModalVisible(true);
-        }
-
         // Set branch name from user data
         setBranchName(studentDataWithProfile.branch_name);
         
         // Fetch additional data from APIs
         await Promise.all([
-          fetchTimetable(user.branch_id),
+          // We will show timetable inside Live Monitoring for students, not on Home
           fetchAuthorizedPersons(user.id),
           fetchThirukkural(),
           fetchTodayAttendance(user.id)
@@ -400,7 +415,7 @@ const StudentHomeScreen = () => {
           </View>
         </Animatable.View>
 
-        {profileCompletion < 100 && (
+        {false && (
           <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.completeProfileBanner}>
             <Ionicons name="alert-circle-outline" size={28} color={Colors.primary} />
             <View style={{ marginLeft: 15, flex: 1 }}>
@@ -429,54 +444,31 @@ const StudentHomeScreen = () => {
               name: branchName,
               franchisee_number: studentData.franchisee_number // Add this if available
             }}
+            attendanceStatus={(todayAttendance && todayAttendance.status) ? todayAttendance.status : 'unknown'}
           />
         </View>
 
 
         
-        <TouchableOpacity onPress={() => setTimetableExpanded(!isTimetableExpanded)} activeOpacity={0.8}>
-          <View style={styles.timetableContainer}>
+        {false && (
+          <TouchableOpacity onPress={() => setTimetableExpanded(!isTimetableExpanded)} activeOpacity={0.8}>
+            <View style={styles.timetableContainer}>
               <View style={styles.timetableHeader}>
-                  <Text style={styles.sectionHeader}>Today's Timetable</Text>
-                  <View style={styles.activityCount}>
-                      {loadingTimetable ? (
-                        <ActivityIndicator size="small" color={Colors.primary} />
-                      ) : (
-                        <>
-                          <Text style={styles.activityCountText}>{timetable.length} Activities</Text>
-                          <Ionicons name={isTimetableExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={Colors.text} />
-                        </>
-                      )}
-                  </View>
+                <Text style={styles.sectionHeader}>Today's Timetable</Text>
+                <View style={styles.activityCount}>
+                  {loadingTimetable ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  ) : (
+                    <>
+                      <Text style={styles.activityCountText}>{timetable.length} Activities</Text>
+                      <Ionicons name={isTimetableExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={Colors.text} />
+                    </>
+                  )}
+                </View>
               </View>
-              {isTimetableExpanded && (
-                  <Reanimated.View style={styles.timetableContent} entering={FadeIn.duration(400)} exiting={FadeOut.duration(400)}>
-                      {loadingTimetable ? (
-                        <View style={styles.loadingContainer}>
-                          <ActivityIndicator size="large" color={Colors.primary} />
-                          <Text style={styles.loadingText}>Loading timetable...</Text>
-                        </View>
-                      ) : timetable.length > 0 ? (
-                        timetable.map((item, index) => (
-                          <View key={index} style={styles.timetableRow}>
-                              <View style={[styles.iconContainer, { backgroundColor: item.color || Colors.primary }]}>
-                                  <Ionicons name={item.icon || 'time'} size={22} color={Colors.white} />
-                              </View>
-                              <View style={styles.timeSubjectContainer}>
-                                  <Text style={styles.timetableSubject}>{item.subject || item.activity_name}</Text>
-                                  <Text style={styles.timetableTime}>{item.time || item.start_time}</Text>
-                              </View>
-                          </View>
-                        ))
-                      ) : (
-                        <View style={styles.emptyContainer}>
-                          <Text style={styles.emptyText}>No timetable available for today</Text>
-                        </View>
-                      )}
-                  </Reanimated.View>
-              )}
-          </View>
-        </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.authorizedContainer}>
           <Text style={styles.authorizedSectionHeader}>Authorized Person to Receive Student</Text>
@@ -531,12 +523,14 @@ const StudentHomeScreen = () => {
         <View style={{ height: 120 }} />
       </ScrollView>
       
-      <OnboardingModal 
-        isVisible={isModalVisible}
-        onClose={() => setModalVisible(false)}
-        studentData={studentData}
-        onProfileUpdate={handleProfileUpdate}
-      />
+      {false && (
+        <OnboardingModal 
+          isVisible={isModalVisible}
+          onClose={() => setModalVisible(false)}
+          studentData={studentData}
+          onProfileUpdate={handleProfileUpdate}
+        />
+      )}
     </ModernBackground>
   );
 };

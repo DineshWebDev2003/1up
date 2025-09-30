@@ -416,7 +416,7 @@ const updateDriverLocation = async (driverId, latitude, longitude) => {
         {(drivers && Array.isArray(drivers)) ? drivers.filter(driver => driver && driver.location).map(driver => (
           <Marker key={driver.id} coordinate={driver.location} title={driver.name || 'Driver'}>
              <Animatable.View animation="bounceIn" duration={1000} style={styles.driverMarkerContainer}>
-                <Image source={driver.avatar ? { uri: `${API_URL}${driver.avatar}` } : require('../../assets/Avartar.png')} style={styles.driverMarkerImage} />
+               <Image source={(driver && driver.avatar) ? { uri: `${API_URL}${driver.avatar}` } : require('../../assets/Avartar.png')} style={styles.driverMarkerImage} />
              </Animatable.View>
           </Marker>
         )) : null}
@@ -499,7 +499,7 @@ const updateDriverLocation = async (driverId, latitude, longitude) => {
           selectedDriver ? (
             <View style={{flex: 1}}>
               <View style={styles.driverDetailHeader}>
-                  <Image source={selectedDriver.avatar ? { uri: `${API_URL}${selectedDriver.avatar}` } : require('../../assets/Avartar.png')} style={styles.avatar} />
+                  <Image source={(selectedDriver && selectedDriver.avatar) ? { uri: `${API_URL}${selectedDriver.avatar}` } : require('../../assets/Avartar.png')} style={styles.avatar} />
                   <View style={styles.driverInfo}>
                       <Text style={styles.driverNameDetail}>{selectedDriver.name}</Text>
                       <Text style={styles.cabNumber}>{selectedDriver.cabNumber}</Text>

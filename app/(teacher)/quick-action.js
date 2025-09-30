@@ -31,6 +31,7 @@ const actions = [
   { icon: 'camera-outline', title: 'Live Camera', href: '/(common)/live-monitoring' },
   { icon: 'car-outline', title: 'Track Cab', href: '/(common)/track-cab' },
   { icon: 'view-dashboard-outline', title: 'Attendance Hub', href: '/(common)/attendance-hub' },
+  { icon: 'clipboard-check-outline', title: 'New Attendance', href: '/(common)/new-attendance' },
   { icon: 'post-outline', title: 'Post Activity', href: '/(common)/post-activity' },
   { icon: 'food-apple-outline', title: 'Student Activities', href: '/(common)/kids-feed' },
   { icon: 'file-document-outline', title: 'Request Leave', href: '/(common)/leave-request' },

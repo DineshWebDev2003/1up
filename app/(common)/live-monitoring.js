@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, TextInput, Modal, Alert, FlatList, ActivityIndicator } from 'react-native';
 import authFetch from '../utils/api';
+import Colors from '../constants/colors';
 import { Picker } from '@react-native-picker/picker';
 import { Video } from 'expo-av';
 import YoutubeIframe from 'react-native-youtube-iframe';
@@ -47,6 +48,8 @@ export default function LiveMonitoringScreen() {
   const [editingBranchId, setEditingBranchId] = useState(null);
   const [tempUrl, setTempUrl] = useState('');
   const [playing, setPlaying] = useState(true);
+  const [timetable, setTimetable] = useState([]);
+  const [loadingTimetable, setLoadingTimetable] = useState(false);
 
   // Check student attendance status
   const checkAttendanceStatus = async (studentId, branchId) => {
@@ -55,6 +58,28 @@ export default function LiveMonitoringScreen() {
     setLoadingAttendance(true);
     try {
       const today = new Date().toISOString().split('T')[0];
+      
+      // First try new attendance API (prefer user_id to map correctly to students.id)
+      try {
+        const newAttendanceResponse = await authFetch(`/api/attendance/get_new_attendance.php?date=${today}&user_id=${studentId}`);
+        const newAttendanceResult = await newAttendanceResponse.json();
+        
+        if (newAttendanceResult.success && newAttendanceResult.data.length > 0) {
+          const attendance = newAttendanceResult.data[0];
+          if (attendance.status === 'present' || attendance.status === 'late') {
+            setAttendanceStatus(attendance.status);
+            setIsPresent(true);
+          } else {
+            setAttendanceStatus('absent');
+            setIsPresent(false);
+          }
+          return;
+        }
+      } catch (newAttendanceError) {
+        console.log('New attendance API not available, trying old API...');
+      }
+      
+      // Fallback to old attendance API
       const response = await authFetch('/api/attendance/check_student_attendance.php', {
         method: 'POST',
         headers: {
@@ -133,6 +158,26 @@ export default function LiveMonitoringScreen() {
         // If user is a Student, check their attendance status
         if (currentUser && currentUser.role === 'Student') {
           await checkAttendanceStatus(currentUser.id, currentUser.branch_id);
+          // Load today's timetable for the student's branch
+          try {
+            setLoadingTimetable(true);
+            const today = new Date().toISOString().split('T')[0];
+            const ttResp = await authFetch('/api/timetable/get_timetable.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ branch_id: currentUser.branch_id, date: today })
+            });
+            const ttData = await ttResp.json();
+            if (ttData.success && ttData.data) {
+              setTimetable(ttData.data);
+            } else {
+              setTimetable([]);
+            }
+          } catch (e) {
+            setTimetable([]);
+          } finally {
+            setLoadingTimetable(false);
+          }
         }
       } else {
         setBranches([]);
@@ -459,6 +504,26 @@ export default function LiveMonitoringScreen() {
             <Animatable.View animation="fadeInUp" duration={800} style={styles.videoCard}>
               <LinearGradient colors={['#ffffff', '#f0f4ff']} style={styles.videoCardGradient}>
                 <Text style={styles.branchName}>{item.name}</Text>
+                {user && user.role === 'Student' && (
+                  <View style={{ width: '100%', marginBottom: 10 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.text, marginBottom: 8 }}>Today's Timetable</Text>
+                    {loadingTimetable ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : timetable.length > 0 ? (
+                      timetable.map((row, idx) => (
+                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 10, padding: 10, marginBottom: 6 }}>
+                          <Ionicons name="time" size={18} color={Colors.primary} style={{ marginRight: 10 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontWeight: '700', color: Colors.text }}>{row.subject || row.activity_name}</Text>
+                            <Text style={{ color: Colors.textSecondary, marginTop: 2 }}>{row.time || row.start_time}</Text>
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={{ color: Colors.textSecondary }}>No timetable today</Text>
+                    )}
+                  </View>
+                )}
                 <ViewShot ref={(ref) => viewShotRefs.current.set(item.id, ref)} options={{ format: 'jpg', quality: 0.9 }}>
                   <View style={styles.videoWrapper}>
                     {item.camera_url ? renderVideoPlayer(item.camera_url) : (

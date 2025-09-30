@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator, Modal } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator, Modal, Linking } from 'react-native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
@@ -10,25 +9,52 @@ import Colors from '../constants/colors';
 
 export default function StudentQRScannerScreen() {
   const router = useRouter();
-  const [hasPermission, setHasPermission] = useState(null);
-  const [scanned, setScanned] = useState(false);
+  const [showOptions, setShowOptions] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [scannedStudent, setScannedStudent] = useState(null);
 
-  useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
-
-    getCameraPermissions();
-  }, []);
-
-  const handleBarCodeScanned = async ({ type, data }) => {
-    if (scanned || isProcessing) return;
+  const openWebQRScanner = () => {
+    const webQRUrl = `http://10.216.219.139/lastchapter/tn-happykids-playschool/web/qr-scanner.html`;
     
-    setScanned(true);
+    Alert.alert(
+      'QR Scanner',
+      'This will open a web-based QR scanner with camera access. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Open Scanner', 
+          onPress: () => {
+            Linking.openURL(webQRUrl).catch(err => {
+              console.error('Failed to open QR scanner:', err);
+              Alert.alert('Error', 'Could not open QR scanner. Please try manual input.');
+            });
+          }
+        }
+      ]
+    );
+  };
+
+  const openManualInput = () => {
+    Alert.prompt(
+      'Enter QR Code',
+      'Enter the QR code data manually:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'OK', 
+          onPress: (text) => {
+            if (text) {
+              processQRCode(text);
+            }
+          }
+        }
+      ],
+      'plain-text'
+    );
+  };
+
+  const processQRCode = async (qrData) => {
     setIsProcessing(true);
     
     try {
@@ -38,26 +64,25 @@ export default function StudentQRScannerScreen() {
       
       // Try to parse as JSON first (new format)
       try {
-        const qrData = JSON.parse(data);
-        if (qrData.student_id) {
+        const qrDataObj = JSON.parse(qrData);
+        if (qrDataObj.student_id) {
           // Could be numeric id or alphanumeric student_code
-          studentId = qrData.student_id;
+          studentId = qrDataObj.student_id;
           if (typeof studentId === 'string' && isNaN(parseInt(studentId, 10))) {
             studentCode = studentId;
           }
-          studentName = qrData.name || 'Student';
-        } else if (qrData.id) {
-          studentId = qrData.id;
-          studentName = qrData.name || 'Student';
+          studentName = qrDataObj.name || 'Student';
+        } else if (qrDataObj.id) {
+          studentId = qrDataObj.id;
+          studentName = qrDataObj.name || 'Student';
         } else {
           throw new Error('Invalid QR data structure');
         }
       } catch (jsonError) {
         // Fallback to integer parsing (old format)
-        studentId = parseInt(data, 10);
+        studentId = parseInt(qrData, 10);
         if (isNaN(studentId)) {
           Alert.alert('Invalid QR Code', 'This QR code does not contain a valid student ID.');
-          setScanned(false);
           setIsProcessing(false);
           return;
         }
@@ -80,13 +105,11 @@ export default function StudentQRScannerScreen() {
         setShowSuccessModal(true);
       } else {
         Alert.alert('Error', result.message || 'Failed to mark attendance.');
-        setScanned(false);
-        setIsProcessing(false);
       }
     } catch (error) {
       console.error('QR Code processing error:', error);
       Alert.alert('Error', 'An error occurred while processing the QR code.');
-      setScanned(false);
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -94,94 +117,54 @@ export default function StudentQRScannerScreen() {
   const handleCloseSuccess = () => {
     setShowSuccessModal(false);
     setScannedStudent(null);
-    setScanned(false);
-    setIsProcessing(false);
+    setShowOptions(true);
   };
 
   const handleScanAnother = () => {
     setShowSuccessModal(false);
     setScannedStudent(null);
-    setScanned(false);
-    setIsProcessing(false);
+    setShowOptions(true);
   };
 
-  if (hasPermission === null) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Requesting camera permission...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (hasPermission === false) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <MaterialCommunityIcons name="camera-off" size={80} color={Colors.danger} />
-          <Text style={styles.errorText}>No access to camera</Text>
-          <Text style={styles.errorSubtext}>Please enable camera permission in settings</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <BarCodeScanner
-        style={StyleSheet.absoluteFillObject}
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr, BarCodeScanner.Constants.BarCodeType.pdf417]}
-      />
-      
-      {/* Header */}
-      <View style={styles.header}>
+      <LinearGradient colors={Colors.gradientMain} style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Student QR Scanner</Text>
         <View style={styles.placeholder} />
-      </View>
+      </LinearGradient>
       
-      {/* Overlay */}
-      <View style={styles.overlay}>
-        <LinearGradient colors={['rgba(0,0,0,0.7)', 'transparent', 'rgba(0,0,0,0.7)']} style={styles.gradient}>
+      <View style={styles.content}>
           <View style={styles.instructionsContainer}>
+          <MaterialCommunityIcons name="qrcode-scan" size={80} color={Colors.primary} />
             <Text style={styles.instructionsTitle}>Scan Student QR Code</Text>
-            <Text style={styles.instructionsText}>Point camera at student's QR code to mark attendance</Text>
+          <Text style={styles.instructionsText}>
+            Choose how you want to scan the student's QR code to mark attendance
+          </Text>
           </View>
           
-          <View style={styles.scanArea}>
-            <View style={styles.scanFrame}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-              {!scanned && <View style={styles.scanLine} />}
-            </View>
+        <View style={styles.optionsContainer}>
+          <TouchableOpacity style={styles.optionButton} onPress={openWebQRScanner}>
+            <MaterialCommunityIcons name="camera" size={30} color={Colors.white} />
+            <Text style={styles.optionTitle}>Camera Scanner</Text>
+            <Text style={styles.optionSubtitle}>Use device camera to scan QR code</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.optionButton, styles.manualOption]} onPress={openManualInput}>
+            <MaterialCommunityIcons name="keyboard" size={30} color={Colors.primary} />
+            <Text style={[styles.optionTitle, styles.manualTitle]}>Manual Input</Text>
+            <Text style={[styles.optionSubtitle, styles.manualSubtitle]}>Enter QR code data manually</Text>
+          </TouchableOpacity>
           </View>
           
-          <View style={styles.footer}>
-            {isProcessing ? (
+        {isProcessing && (
               <View style={styles.processingContainer}>
-                <ActivityIndicator size="large" color={Colors.white} />
+            <ActivityIndicator size="large" color={Colors.primary} />
                 <Text style={styles.processingText}>Processing attendance...</Text>
               </View>
-            ) : scanned ? (
-              <View style={styles.scannedContainer}>
-                <MaterialCommunityIcons name="check-circle" size={50} color={Colors.accent} />
-                <Text style={styles.scannedText}>QR Code Scanned!</Text>
-              </View>
-            ) : (
-              <Text style={styles.instructionText}>Position QR code within the frame</Text>
-            )}
-          </View>
-        </LinearGradient>
+        )}
       </View>
 
       {/* Success Modal */}
@@ -219,31 +202,7 @@ export default function StudentQRScannerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    color: Colors.white,
-    fontSize: 16,
-    marginTop: 20,
-  },
-  errorText: {
-    color: Colors.danger,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  errorSubtext: {
-    color: Colors.lightText,
-    fontSize: 16,
-    marginTop: 10,
-    textAlign: 'center',
+    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -254,7 +213,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   backButton: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
     padding: 10,
   },
@@ -266,111 +225,75 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  overlay: {
+  content: {
     flex: 1,
-  },
-  gradient: {
-    flex: 1,
+    padding: 20,
   },
   instructionsContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
     alignItems: 'center',
+    marginBottom: 40,
   },
   instructionsTitle: {
-    color: Colors.white,
+    color: Colors.darkText,
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginTop: 20,
     marginBottom: 10,
   },
   instructionsText: {
-    color: Colors.lightText,
+    color: Colors.textSecondary,
     fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  optionsContainer: {
+    gap: 20,
+  },
+  optionButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  manualOption: {
+    backgroundColor: Colors.card,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  optionTitle: {
+    color: Colors.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  manualTitle: {
+    color: Colors.primary,
+  },
+  optionSubtitle: {
+    color: Colors.lightText,
+    fontSize: 14,
     textAlign: 'center',
     opacity: 0.9,
   },
-  scanArea: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scanFrame: {
-    width: 280,
-    height: 280,
-    position: 'relative',
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: Colors.accent,
-    borderWidth: 4,
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderLeftWidth: 0,
-    borderBottomWidth: 0,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderRightWidth: 0,
-    borderTopWidth: 0,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-  },
-  scanLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: 3,
-    backgroundColor: Colors.accent,
-    opacity: 0.8,
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  footer: {
-    paddingBottom: 60,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+  manualSubtitle: {
+    color: Colors.textSecondary,
   },
   processingContainer: {
     alignItems: 'center',
+    marginTop: 30,
   },
   processingText: {
-    color: Colors.white,
+    color: Colors.primary,
     fontSize: 16,
     marginTop: 10,
-  },
-  scannedContainer: {
-    alignItems: 'center',
-  },
-  scannedText: {
-    color: Colors.accent,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 10,
-  },
-  instructionText: {
-    color: Colors.lightText,
-    fontSize: 16,
-    textAlign: 'center',
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,

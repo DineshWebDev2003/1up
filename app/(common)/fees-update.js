@@ -48,7 +48,8 @@ export default function FeesUpdateScreen() {
     try {
       let studentsUrl = '/api/users/get_users.php?role=Student';
       let branchesUrl = '/api/branches/get_branches.php';
-      let feesUrl = '/api/fees/get_fees.php';
+      // Use consolidated fees API that aggregates from `fees` table
+      let feesUrl = '/api/fees.php';
 
       if (currentUser.role === 'Franchisee') {
         studentsUrl += `&branch_id=${currentUser.branch_id}`;
@@ -73,8 +74,9 @@ export default function FeesUpdateScreen() {
           return acc;
         }, {});
 
-        const feesMap = (feesResult.data && Array.isArray(feesResult.data)) ? feesResult.data.reduce((acc, fee) => {
-          const key = fee.student_id ?? fee.student_user_id ?? fee.user_id;
+      const feesMap = (feesResult.data && Array.isArray(feesResult.data)) ? feesResult.data.reduce((acc, fee) => {
+          // Prefer actual student_id when present, otherwise fall back to user id fields
+          const key = (fee.student_id ?? fee.student_user_id ?? fee.user_id ?? fee.id);
           if (key != null) {
             acc[key] = fee;
           }
@@ -82,10 +84,10 @@ export default function FeesUpdateScreen() {
         }, {}) : {};
 
         const combinedData = (usersResult.data && Array.isArray(usersResult.data)) ? usersResult.data.map(student => {
-          const feeDetails = feesMap[student.student_id || student.id] || { total_fees: '0.00', amount_paid: '0.00' };
+          const feeDetails = feesMap[student.student_id || student.id] || { total_fees: '0.00', amount_paid: '0.00', pending_amount: '0.00' };
           const total = parseFloat(feeDetails.total_fees);
           const paid = parseFloat(feeDetails.amount_paid);
-          const due = total - paid;
+          const due = isNaN(total) || isNaN(paid) ? 0 : (total - paid);
           
           let status = 'Not Set';
           if (total > 0) {

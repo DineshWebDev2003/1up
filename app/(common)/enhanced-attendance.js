@@ -1,21 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert, Image, ActivityIndicator, Modal, Linking } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Platform, Alert, Image, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Animatable from 'react-native-animatable';
-// import LottieView from 'lottie-react-native'; // ✅ COMMENTED OUT - CAUSING ISSUES
-// import DateTimePicker from '@react-native-community/datetimepicker'; // ✅ TEMPORARILY COMMENTED
 import Colors from '../constants/colors';
 import authFetch from '../utils/api';
 import { API_URL } from '../../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MonthlyAttendance from './monthly-attendance';
-// Removed Camera import - using web-based QR scanning instead
 
-
-export default function AttendanceScreen() {
+export default function EnhancedAttendanceScreen() {
   const { branch, branch_id } = useLocalSearchParams();
   const router = useRouter();
   const [students, setStudents] = useState([]);
@@ -25,16 +21,15 @@ export default function AttendanceScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [viewMode, setViewMode] = useState('daily');
   const [loading, setLoading] = useState(false);
-  const [attendanceMode, setAttendanceMode] = useState('manual'); // 'manual' or 'qr'
-  const [showQRScanner, setShowQRScanner] = useState(false);
-  const [scanned, setScanned] = useState(false);
   const [showGuardianModal, setShowGuardianModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [attendanceStatus, setAttendanceStatus] = useState('present');
   const [currentUser, setCurrentUser] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredStudents, setFilteredStudents] = useState([]);
 
   const fetchBranches = useCallback(async () => {
-    if (branch_id) return; // Don't fetch all branches if a specific one is passed
+    if (branch_id) return;
     try {
       const response = await authFetch('/api/branches/get_branches.php');
       const result = await response.json();
@@ -48,7 +43,7 @@ export default function AttendanceScreen() {
     }
   }, [branch_id]);
 
-    const fetchAttendance = useCallback(async (currentDate, currentBranchId) => {
+  const fetchAttendance = useCallback(async (currentDate, currentBranchId) => {
     setLoading(true);
     try {
       const formattedDate = currentDate.toISOString().split('T')[0];
@@ -75,7 +70,7 @@ export default function AttendanceScreen() {
       const attendanceResult = await attendanceResponse.json();
       const attendanceData = attendanceResult.success ? attendanceResult.data : [];
 
-      // 3. Merge the two lists (support id or student_id from API)
+      // 3. Merge the two lists
       const attendanceMap = new Map();
       attendanceData.forEach(att => {
         if (!att) return;
@@ -88,7 +83,7 @@ export default function AttendanceScreen() {
         const attendanceRecord = attendanceMap.get(key);
         return {
           ...student,
-          status: attendanceRecord ? attendanceRecord.status : 'unmarked', // Default to 'unmarked'
+          status: attendanceRecord ? attendanceRecord.status : 'unmarked',
           inTime: attendanceRecord ? (attendanceRecord.check_in_time ? attendanceRecord.check_in_time.slice(0, 5) : null) : null,
           outTime: attendanceRecord ? (attendanceRecord.check_out_time ? attendanceRecord.check_out_time.slice(0, 5) : null) : null,
           inBy: attendanceRecord ? `${attendanceRecord.marked_by_name} (${attendanceRecord.marked_by_role})` : null,
@@ -98,10 +93,12 @@ export default function AttendanceScreen() {
       });
 
       setStudents(mergedStudents);
+      setFilteredStudents(mergedStudents);
 
     } catch (error) {
       console.error('Error fetching attendance:', error);
       setStudents([]);
+      setFilteredStudents([]);
     } finally {
       setLoading(false);
     }
@@ -121,8 +118,6 @@ export default function AttendanceScreen() {
     fetchAttendance(date, selectedBranchId);
   }, [date, selectedBranchId, fetchAttendance]);
 
-  // Removed camera permissions - using web-based QR scanning
-
   // Load current user for marked_by metadata
   useEffect(() => {
     const loadUser = async () => {
@@ -136,13 +131,27 @@ export default function AttendanceScreen() {
     loadUser();
   }, []);
 
+  // Filter students based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredStudents(students);
+    } else {
+      const filtered = students.filter(student => 
+        student.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.student_id?.toString().includes(searchQuery) ||
+        student.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredStudents(filtered);
+    }
+  }, [searchQuery, students]);
+
   const onDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || date;
     setShowDatePicker(Platform.OS === 'ios');
     setDate(currentDate);
   };
 
-  const handleMarkAttendance = async (studentId, status) => {
+  const handleMarkAttendanceDirect = async (studentId, status) => {
     try {
       const response = await authFetch('/api/attendance/mark_manual_attendance.php', {
         method: 'POST',
@@ -157,7 +166,6 @@ export default function AttendanceScreen() {
       const result = await response.json();
 
       if (result.success) {
-        // Update the UI with proper time and type information
         const currentTime = new Date().toLocaleTimeString().slice(0, 5);
         setStudents(students.map(student =>
           student.id === studentId ? { 
@@ -168,18 +176,27 @@ export default function AttendanceScreen() {
             type: 'Manual'
           } : student
         ));
+        
+        // Update filtered students too
+        setFilteredStudents(prev => prev.map(student =>
+          student.id === studentId ? { 
+            ...student, 
+            status: status,
+            inTime: status === 'present' ? currentTime : student.inTime,
+            outTime: status === 'absent' ? currentTime : student.outTime,
+            type: 'Manual'
+          } : student
+        ));
+        
         Alert.alert('Success', `Student marked as ${status}.`);
-        // Refresh to pull authoritative marked_by and guardian_type
         fetchAttendance(date, selectedBranchId);
       } else {
         Alert.alert('Error', result.message || 'Failed to mark attendance.');
-        // Revert optimistic update on error
         fetchAttendance(date, selectedBranchId);
       }
     } catch (error) {
       console.error('Attendance marking error:', error);
       Alert.alert('Error', 'An error occurred while marking attendance.');
-      // Revert optimistic update on error
       fetchAttendance(date, selectedBranchId);
     }
   };
@@ -210,8 +227,10 @@ export default function AttendanceScreen() {
       const result = await response.json();
 
       if (result.success) {
-        // Optimistically update the UI
         setStudents(students.map(student =>
+          student.id === selectedStudent.id ? { ...student, status: attendanceStatus } : student
+        ));
+        setFilteredStudents(prev => prev.map(student =>
           student.id === selectedStudent.id ? { ...student, status: attendanceStatus } : student
         ));
         Alert.alert('Success', `${selectedStudent.name} marked as ${attendanceStatus} by ${guardianName}.`);
@@ -226,79 +245,6 @@ export default function AttendanceScreen() {
     }
   };
 
-  const handleQRCodeScanned = (data) => {
-    if (scanned) return;
-    setScanned(true);
-    try {
-      let studentId;
-      let studentCode = null;
-      let studentName = 'Student';
-      
-      // Try to parse as JSON first (new format)
-      try {
-        const qrData = JSON.parse(data);
-        if (qrData.student_id) {
-          studentId = qrData.student_id;
-          if (typeof studentId === 'string' && isNaN(parseInt(studentId, 10))) {
-            studentCode = studentId;
-          }
-          studentName = qrData.name || 'Student';
-        } else if (qrData.id) {
-          studentId = qrData.id;
-          studentName = qrData.name || 'Student';
-        } else {
-          throw new Error('Invalid QR data structure');
-        }
-      } catch (jsonError) {
-        // Fallback to integer parsing (old format)
-        studentId = parseInt(data, 10);
-        if (isNaN(studentId)) {
-          Alert.alert('Invalid QR Code', 'This QR code does not contain a valid student ID.');
-          setTimeout(() => setScanned(false), 2000);
-          return;
-        }
-      }
-      
-      // Find the student in the current list to update UI immediately
-      const student = students.find(s => (s.id === studentId) || (s.student_id === studentId));
-      if (student) {
-        // Update UI optimistically
-        setStudents(students.map(s => 
-          s.id === studentId ? { ...s, status: 'present', inTime: new Date().toLocaleTimeString().slice(0, 5), type: 'QR Code' } : s
-        ));
-      }
-      
-      // Mark attendance via API (support numeric id or alphanumeric code)
-      authFetch('/api/attendance/mark_manual_attendance.php', {
-        method: 'POST',
-        body: JSON.stringify({ 
-          ...(studentCode ? { student_code: studentCode } : { student_id: studentId }),
-          status: 'present',
-          date: date.toISOString().split('T')[0],
-          marked_by_name: currentUser?.name || currentUser?.username || 'Staff',
-          marked_by_role: currentUser?.role || 'Staff'
-        }),
-      })
-      .then(res => res.json())
-      .then(result => {
-        if (!result.success) {
-          Alert.alert('Error', result.message || 'Failed to mark attendance.');
-        }
-        // Refresh list to show server-calculated in/out and by whom
-        fetchAttendance(date, selectedBranchId);
-      })
-      .catch(() => {
-        Alert.alert('Error', 'Could not mark attendance.');
-      });
-      // Allow scanning another code after a short delay
-      setTimeout(() => setScanned(false), 2000);
-    } catch (error) {
-      console.error('QR Code processing error:', error);
-      Alert.alert('Error', 'Could not process the QR code.');
-      setTimeout(() => setScanned(false), 2000);
-    }
-  };
-
   const renderStudentItem = ({ item, index }) => (
     <Animatable.View animation="fadeInUp" duration={600} delay={index * 100}>
       <LinearGradient
@@ -309,7 +255,7 @@ export default function AttendanceScreen() {
         }
         style={styles.studentCard}
       >
-                <View style={{flexDirection: 'row', flex: 1}}>
+        <View style={{flexDirection: 'row', flex: 1}}>
           <View style={styles.studentInfo}>
             <Image source={
               item.avatar_url ? { uri: item.avatar_url } :
@@ -320,8 +266,8 @@ export default function AttendanceScreen() {
               <Text style={styles.studentName}>{item.name || item.username || item.student_id}</Text>
               <Text style={styles.studentId}>{(item.student_id || item.id)} - {(item.branch_name || item.branch || '')}</Text>
               <View style={styles.tagContainer}>
-                <MaterialCommunityIcons name={item.type === 'QR Code' ? 'qrcode-scan' : 'account-edit-outline'} size={14} color={Colors.lightText} />
-                <Text style={styles.attendanceType}>{item.type || 'N/A'}</Text>
+                <MaterialCommunityIcons name="account-edit-outline" size={14} color={Colors.lightText} />
+                <Text style={styles.attendanceType}>{item.type || 'Manual'}</Text>
               </View>
             </View>
           </View>
@@ -345,22 +291,20 @@ export default function AttendanceScreen() {
             </Text>
           </View>
         </View>
-        {item.status === 'unmarked' && (
-          <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.inButton]}
-              onPress={() => handleMarkAttendanceWithGuardian(item.id, 'present')}
-            >
-              <Text style={styles.actionButtonText}>In</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.outButton]}
-              onPress={() => handleMarkAttendanceWithGuardian(item.id, 'absent')}
-            >
-              <Text style={styles.actionButtonText}>Out</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.inButton, item.status === 'present' && styles.activeButton]}
+            onPress={() => handleMarkAttendanceWithGuardian(item.id, 'present')}
+          >
+            <Text style={styles.actionButtonText}>In</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.outButton, item.status === 'absent' && styles.activeButton]}
+            onPress={() => handleMarkAttendanceWithGuardian(item.id, 'absent')}
+          >
+            <Text style={styles.actionButtonText}>Out</Text>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
     </Animatable.View>
   );
@@ -368,17 +312,10 @@ export default function AttendanceScreen() {
   const Header = () => (
     <Animatable.View animation="fadeInDown" duration={800}>
       <LinearGradient colors={Colors.gradient1} style={styles.header}>
-        {/* <LottieView source={require('../../assets/lottie/attendance.json')} autoPlay loop style={styles.lottie} /> */}
-        <Text style={styles.title}>Student Attendance</Text>
+        <Text style={styles.title}>Enhanced Attendance</Text>
         <Text style={styles.subtitle}>{branch ? `Branch: ${branch}` : 'All Branches'}</Text>
-        <TouchableOpacity 
-          style={styles.qrScannerButton} 
-          onPress={() => setShowQRScanner(true)}
-        >
-          <MaterialCommunityIcons name="qrcode-scan" size={24} color={Colors.white} />
-          <Text style={styles.qrScannerButtonText}>QR Scanner</Text>
-        </TouchableOpacity>
       </LinearGradient>
+      
       <View style={styles.filtersContainer}>
         {!branch_id && (
           <View style={styles.pickerContainer}>
@@ -392,40 +329,51 @@ export default function AttendanceScreen() {
           <Text style={styles.datePickerText}>{date.toLocaleDateString()}</Text>
         </TouchableOpacity>
       </View>
-      {/* {showDatePicker && <DateTimePicker value={date} mode='date' display='default' onChange={onDateChange} />} */}
-      <View style={styles.modeSelectorContainer}>
-        <TouchableOpacity 
-          style={[styles.modeButton, attendanceMode === 'manual' && styles.activeModeButton]}
-          onPress={() => setAttendanceMode('manual')}
-        >
-          <MaterialCommunityIcons name="format-list-bulleted" size={20} color={attendanceMode === 'manual' ? Colors.white : Colors.primary} />
-          <Text style={[styles.modeButtonText, attendanceMode === 'manual' && styles.activeModeButtonText]}>Manual Entry</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.modeButton, attendanceMode === 'qr' && styles.activeModeButton]}
-          onPress={() => setAttendanceMode('qr')}
-        >
-          <MaterialCommunityIcons name="qrcode-scan" size={20} color={attendanceMode === 'qr' ? Colors.white : Colors.primary} />
-          <Text style={[styles.modeButtonText, attendanceMode === 'qr' && styles.activeModeButtonText]}>Scan QR</Text>
-        </TouchableOpacity>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <MaterialCommunityIcons name="magnify" size={20} color={Colors.textSecondary} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search students..."
+          placeholderTextColor={Colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+            <MaterialCommunityIcons name="close-circle" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Quick Stats */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{filteredStudents.filter(s => s.status === 'present').length}</Text>
+          <Text style={styles.statLabel}>Present</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{filteredStudents.filter(s => s.status === 'absent').length}</Text>
+          <Text style={styles.statLabel}>Absent</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{filteredStudents.filter(s => s.status === 'unmarked').length}</Text>
+          <Text style={styles.statLabel}>Unmarked</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{filteredStudents.length}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
       </View>
     </Animatable.View>
   );
-
-  // Handle QR mode toggle
-  useEffect(() => {
-    if (attendanceMode === 'qr') {
-      setShowQRScanner(true);
-      // Reset back to manual after opening scanner
-      setTimeout(() => setAttendanceMode('manual'), 0);
-    }
-  }, [attendanceMode]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {viewMode === 'daily' ? (
         <FlatList
-          data={students}
+          data={filteredStudents}
           renderItem={renderStudentItem}
           keyExtractor={(item) => item.id.toString()}
           ListHeaderComponent={Header}
@@ -433,13 +381,15 @@ export default function AttendanceScreen() {
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               {loading ? (
-                <Text>Loading...</Text>
-                // <LottieView source={require('../../assets/lottie/loading.json')} autoPlay loop style={styles.lottieEmpty} />
+                <ActivityIndicator size="large" color={Colors.primary} />
               ) : (
-                <Text>No Data</Text>
-                // <LottieView source={require('../../assets/lottie/empty.json')} autoPlay loop style={styles.lottieEmpty} />
+                <MaterialCommunityIcons name="account-group-outline" size={60} color={Colors.textSecondary} />
               )}
-              <Text style={styles.emptyText}>{loading ? 'Fetching attendance...' : 'No attendance data found.'}</Text>
+              <Text style={styles.emptyText}>
+                {loading ? 'Fetching attendance...' : 
+                 searchQuery ? 'No students found matching your search.' : 
+                 'No attendance data found.'}
+              </Text>
             </View>
           )}
           ListFooterComponent={() => students.length > 0 && (
@@ -460,91 +410,6 @@ export default function AttendanceScreen() {
           onBack={() => setViewMode('daily')}
         />
       )}
-      
-      {/* QR Scanner Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showQRScanner}
-        onRequestClose={() => setShowQRScanner(false)}
-      >
-        <View style={styles.qrModalContainer}>
-          <View style={styles.qrModalContent}>
-            <View style={styles.qrHeader}>
-              <Text style={styles.qrTitle}>Scan QR Code</Text>
-              <TouchableOpacity 
-                style={styles.qrCloseButton}
-                onPress={() => setShowQRScanner(false)}
-              >
-                <MaterialCommunityIcons name="close" size={24} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.qrScannerContainer}>
-              <Text style={styles.qrInstructions}>
-                Choose how to scan QR code:
-              </Text>
-              
-              {/* Web-based QR Scanner Button */}
-              <TouchableOpacity 
-                style={styles.webQRButton}
-                onPress={() => {
-                  // Open web-based QR scanner
-                  const webQRUrl = `http://10.216.219.139/lastchapter/tn-happykids-playschool/web/qr-scanner.html`;
-                  
-                  Alert.alert(
-                    'QR Scanner',
-                    'This will open a web-based QR scanner with camera access. Continue?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Open Scanner', 
-                        onPress: () => {
-                          Linking.openURL(webQRUrl).catch(err => {
-                            console.error('Failed to open QR scanner:', err);
-                            Alert.alert('Error', 'Could not open QR scanner. Please try manual input.');
-                          });
-                          setShowQRScanner(false);
-                        }
-                      }
-                    ]
-                  );
-                }}
-              >
-                <MaterialCommunityIcons name="qrcode-scan" size={20} color={Colors.white} />
-                <Text style={styles.webQRText}>Open Camera Scanner</Text>
-              </TouchableOpacity>
-              
-              {/* Manual QR Input */}
-              <TouchableOpacity 
-                style={styles.manualQRButton}
-                onPress={() => {
-                  Alert.prompt(
-                    'Enter QR Code',
-                    'Enter the QR code data manually:',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'OK', 
-                        onPress: (text) => {
-                          if (text) {
-                            handleQRCodeScanned(text);
-                            setShowQRScanner(false);
-                          }
-                        }
-                      }
-                    ],
-                    'plain-text'
-                  );
-                }}
-              >
-                <MaterialCommunityIcons name="keyboard" size={20} color={Colors.primary} />
-                <Text style={styles.manualQRText}>Enter Manually</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Guardian Selection Modal */}
       <Modal
@@ -616,7 +481,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: Colors.background },
   listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
   header: { paddingTop: Platform.OS === 'android' ? 40 : 20, paddingBottom: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, alignItems: 'center' },
-  lottie: { width: 300, height: 130, marginBottom: -15 },
   title: { fontSize: 32, fontWeight: 'bold', color: Colors.lightText, textAlign: 'center' },
   subtitle: { fontSize: 16, color: Colors.lightText, opacity: 0.9, marginTop: 4 },
   filtersContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 5 },
@@ -625,6 +489,48 @@ const styles = StyleSheet.create({
   pickerItem: { fontSize: 16 },
   datePickerButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.card, borderRadius: 15, paddingVertical: 15, ...Platform.select({ ios: { shadowColor: Colors.shadow, shadowRadius: 5, shadowOpacity: 0.1 }, android: { elevation: 3 } }) },
   datePickerText: { marginLeft: 10, fontSize: 16, color: Colors.primary, fontWeight: '600' },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 15,
+    marginHorizontal: 15,
+    marginBottom: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    ...Platform.select({ ios: { shadowColor: Colors.shadow, shadowRadius: 5, shadowOpacity: 0.1 }, android: { elevation: 3 } })
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: Colors.darkText,
+  },
+  clearSearchButton: { marginLeft: 10 },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 15,
+    marginBottom: 15,
+  },
+  statItem: {
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 12,
+    minWidth: 70,
+    ...Platform.select({ ios: { shadowColor: Colors.shadow, shadowRadius: 3, shadowOpacity: 0.1 }, android: { elevation: 2 } })
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
   studentCard: { borderRadius: 15, padding: 15, marginBottom: 15, flexDirection: 'row', alignItems: 'center', shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   studentInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: Colors.lightText },
@@ -636,8 +542,7 @@ const styles = StyleSheet.create({
   attendanceDetails: { alignItems: 'flex-end', marginLeft: 10 },
   timeEntry: { alignItems: 'flex-end', marginBottom: 5 },
   timeLabel: { fontSize: 13, color: Colors.lightText, fontWeight: '600' },
-  byLabel: { fontSize: 11, color: Colors.lightText, opacity: 0.8 },
-  statusToggle: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 20, padding: 2 },
+  summaryText: { fontSize: 11, color: Colors.lightText, opacity: 0.8, textAlign: 'right' },
   actionButtonsContainer: {
     flexDirection: 'row',
     position: 'absolute',
@@ -666,21 +571,7 @@ const styles = StyleSheet.create({
   },
   viewToggleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 15, marginTop: 10, shadowColor: Colors.shadow, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
   viewToggleButtonText: { color: Colors.lightText, fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
-  modeSelectorContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 10, justifyContent: 'center', backgroundColor: Colors.background },
-  modeButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, marginHorizontal: 5, borderWidth: 1, borderColor: Colors.primary },
-  activeModeButton: { backgroundColor: Colors.primary },
-  modeButtonText: { marginLeft: 8, fontSize: 14, fontWeight: '600', color: Colors.primary },
-  activeModeButtonText: { color: Colors.white },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  qrHeader: { position: 'absolute', top: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 15 },
-  qrTitle: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-  scannedOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)' },
-  lottieSuccess: { width: 150, height: 150 },
-  scannedText: { fontSize: 22, color: 'white', fontWeight: 'bold', marginTop: 10 },
-  switchModeFooter: { position: 'absolute', bottom: 40, alignSelf: 'center', backgroundColor: Colors.primary, paddingHorizontal: 30, paddingVertical: 15, borderRadius: 25 },
-  switchModeFooterText: { fontSize: 16, color: 'white', fontWeight: 'bold' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50 },
-  lottieEmpty: { width: 200, height: 200 },
   emptyText: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center', marginTop: 20 },
   modalContainer: {
     flex: 1,
@@ -746,101 +637,5 @@ const styles = StyleSheet.create({
     color: Colors.lightText,
     fontSize: 16,
     fontWeight: '600',
-  },
-  backButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  backButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  qrScannerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    marginTop: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  qrScannerButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  qrModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  qrModalContent: {
-    backgroundColor: Colors.lightText,
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
-  },
-  qrHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  qrTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.darkText,
-  },
-  qrCloseButton: {
-    padding: 5,
-  },
-  qrScannerContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  qrInstructions: {
-    fontSize: 16,
-    color: Colors.darkText,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  webQRButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.secondary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    marginBottom: 15,
-  },
-  webQRText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  manualQRButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-  },
-  manualQRText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
   },
 });

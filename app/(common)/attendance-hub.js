@@ -61,20 +61,7 @@ const AttendanceHubScreen = () => {
       gradient: Colors.gradientPrimary,
       roles: ['Admin', 'Franchisee', 'Teacher', 'Tuition Teacher'] // All roles can access student attendance
     },
-    {
-      title: 'Live Monitoring',
-      icon: 'video-wireless-outline',
-      screen: '/(common)/live-monitoring',
-      gradient: Colors.gradientAccent,
-      roles: ['Admin', 'Franchisee', 'Teacher']
-    },
-    {
-      title: 'QR Scanner',
-      icon: 'qrcode-scan',
-      screen: '/(common)/student-qr-scanner',
-      gradient: Colors.gradientSecondary,
-      roles: ['Admin', 'Franchisee', 'Teacher', 'Tuition Teacher'] // All roles can access QR scanner
-    },
+  
     {
       title: 'Staff Attendance',
       icon: 'account-tie-outline',

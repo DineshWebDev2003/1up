@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, Image, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker } from 'react-native-maps';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -15,10 +16,14 @@ const TrackCabScreen = () => {
   const [isOnDuty, setIsOnDuty] = useState(false);
   const [locationSubscription, setLocationSubscription] = useState(null);
   const [studentLocation, setStudentLocation] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const schoolLocation = { latitude: 13.09, longitude: 80.27 }; // School location
   const mapRef = useRef(null);
 
   useEffect(() => {
+    AsyncStorage.getItem('userData').then((v) => {
+      if (v) setCurrentUser(JSON.parse(v));
+    });
     const toggleLocationTracking = async () => {
       if (isOnDuty) {
         let { status } = await Location.requestForegroundPermissionsAsync();
@@ -139,9 +144,11 @@ const TrackCabScreen = () => {
             keyExtractor={(item) => item.student_id.toString()}
             contentContainerStyle={styles.listContainer}
           />
-          <TouchableOpacity style={[styles.dutyButton, isOnDuty ? styles.offDutyButton : styles.onDutyButton]} onPress={() => setIsOnDuty(!isOnDuty)}>
-            <Text style={styles.dutyButtonText}>{isOnDuty ? 'Go Off Duty' : 'Go On Duty'}</Text>
-          </TouchableOpacity>
+          {(currentUser && currentUser.role !== 'Student') && (
+            <TouchableOpacity style={[styles.dutyButton, isOnDuty ? styles.offDutyButton : styles.onDutyButton]} onPress={() => setIsOnDuty(!isOnDuty)}>
+              <Text style={styles.dutyButtonText}>{isOnDuty ? 'Go Off Duty' : 'Go On Duty'}</Text>
+            </TouchableOpacity>
+          )}
           </>
         )}
       </Animatable.View>
