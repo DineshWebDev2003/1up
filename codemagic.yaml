@@ -24,10 +24,6 @@ workflows:
     environment:
       node: 20
       java: 17
-      android_signing:
-        # Android signing is provided via environment variables set in scripts.
-        # Keep this section to ensure Android tooling is provisioned.
-        properties: {}
       vars:
         APP_DIR: tn-happykids-playschool
     cache:
