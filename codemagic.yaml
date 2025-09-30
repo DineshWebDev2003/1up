@@ -57,13 +57,11 @@ workflows:
           if [ -n "$CM_KEYSTORE" ]; then
             echo "Writing release keystore"
             echo "$CM_KEYSTORE" | base64 --decode > release-keystore.jks
-            # Append signing credentials to gradle.properties for release build
-            cat >> gradle.properties <<EOF
-MYAPP_UPLOAD_STORE_FILE=release-keystore.jks
-MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS
-MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD
-MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD
-EOF
+            # Append signing credentials to gradle.properties for release build (avoid YAML heredoc parsing issues)
+            echo "MYAPP_UPLOAD_STORE_FILE=release-keystore.jks" >> gradle.properties
+            echo "MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS" >> gradle.properties
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> gradle.properties
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> gradle.properties
           else
             echo "WARNING: CM_KEYSTORE not set. Build will be unsigned."
           fi
