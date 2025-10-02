@@ -11,15 +11,16 @@ const InfoRow = ({ label, value }) => (
 export default function Invoice({ transaction, branchDetails }) {
     if (!transaction) return null;
 
-    const sonOf = transaction.sonOf || 'GOPINATH T'; // Placeholder
-    const voucherNo = `TNHK${String(transaction.id || '001').padStart(3, '0')}`;
-    const transactionId = transaction.transactionId || '-';
+    // Use actual data from database, no hardcoded values
+    const sonOf = transaction.parent_name || transaction.guardian_name || 'N/A';
+    const voucherNo = transaction.invoice_number || `TNHK${String(transaction.id || '001').padStart(3, '0')}`;
+    const transactionId = transaction.transaction_id || transaction.transactionId || 'N/A';
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
                 <Image source={transaction.photo} style={styles.logo} />
-                <Text style={styles.headerText}>TN HAPPYKIDS <Text style={styles.branchText}>{(transaction.branch || '').toUpperCase()}</Text></Text>
+                <Text style={styles.headerText}>TN HAPPYKIDS <Text style={styles.branchText}>{(transaction.branch_name || transaction.branch || branchDetails?.name || '').toUpperCase()}</Text></Text>
                 <View style={styles.headerCircles}>
                     <View style={[styles.circle, { backgroundColor: '#E91E63' }]} />
                     <View style={[styles.circle, { backgroundColor: '#4CAF50' }]} />
@@ -29,17 +30,17 @@ export default function Invoice({ transaction, branchDetails }) {
 
             <View style={styles.body}>
                 <View style={styles.watermarkContainer}><Image source={require('../../assets/logo.png')} style={styles.watermarkImage} /></View>
-                <Text style={styles.title}>BILL VOUCHER-ADMISSION FEES</Text>
+                <Text style={styles.title}>BILL VOUCHER - {(transaction.description || transaction.fee_type || transaction.type || 'FEES').toUpperCase()}</Text>
                 <View style={styles.voucherDetails}>
                     <Text style={styles.detailText}>VOUCHER NO: {voucherNo}</Text>
-                    <Text style={styles.detailText}>DATE: {transaction.date}</Text>
+                    <Text style={styles.detailText}>DATE: {transaction.payment_date || transaction.date || transaction.created_at || new Date().toLocaleDateString()}</Text>
                 </View>
 
-                <InfoRow label="STUDENT NAME" value={transaction.studentName} />
-                <InfoRow label="SON OF" value={sonOf} />
-                <InfoRow label="PARTICULARS" value="ADMISSION FEES" />
+                <InfoRow label="STUDENT NAME" value={transaction.student_name || transaction.studentName || 'N/A'} />
+                <InfoRow label="SON/DAUGHTER OF" value={sonOf} />
+                <InfoRow label="PARTICULARS" value={transaction.description || transaction.fee_type || transaction.type || 'FEES'} />
                 <InfoRow label="AMOUNT" value={`INR ${transaction.amount}/-`} />
-                <InfoRow label="MODE OF PAYMENT" value={transaction.paymentMethod} />
+                <InfoRow label="MODE OF PAYMENT" value={transaction.payment_method || transaction.paymentMethod || 'N/A'} />
                 <InfoRow label="TRANSACTION ID" value={transactionId} />
 
                 <View style={styles.receivedContainer}>
@@ -56,8 +57,8 @@ export default function Invoice({ transaction, branchDetails }) {
 
             <View style={styles.footer}>
                 <Text style={styles.footerTitle}>ADDRESS</Text>
-                <Text style={styles.footerText}>{branchDetails?.address}</Text>
-                <Text style={styles.footerTitle}>CONTACT: <Text style={styles.footerText}>{branchDetails?.contact}</Text></Text>
+                <Text style={styles.footerText}>{branchDetails?.address || transaction.branch_address || 'Address not available'}</Text>
+                <Text style={styles.footerTitle}>CONTACT: <Text style={styles.footerText}>{branchDetails?.contact || branchDetails?.phone || transaction.branch_contact || 'Contact not available'}</Text></Text>
             </View>
         </View>
     );

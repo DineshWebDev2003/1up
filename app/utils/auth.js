@@ -5,6 +5,8 @@ import { router } from 'expo-router';
 const AuthUtils = {
   checkAuthentication,
   clearAuthAndRedirect,
+  logout,
+  isAuthenticated,
   handleAuthError,
   getUserData
 };
@@ -41,6 +43,37 @@ export const clearAuthAndRedirect = async () => {
   } catch (error) {
     console.error('Error clearing auth data:', error);
     router.replace('/login');
+  }
+};
+
+/**
+ * Logout user - clear all auth data and redirect to login
+ */
+export const logout = async () => {
+  try {
+    console.log('Logging out user...');
+    await AsyncStorage.multiRemove(['sessionToken', 'userData', 'userRole', 'pendingPushToken']);
+    router.replace('/login');
+  } catch (error) {
+    console.error('Error during logout:', error);
+    router.replace('/login');
+  }
+};
+
+/**
+ * Check if user is authenticated without redirecting
+ * @returns {Promise<boolean>} - Returns true if authenticated, false otherwise
+ */
+export const isAuthenticated = async () => {
+  try {
+    const sessionToken = await AsyncStorage.getItem('sessionToken');
+    const userData = await AsyncStorage.getItem('userData');
+    const userRole = await AsyncStorage.getItem('userRole');
+    
+    return !!(sessionToken && userData && userRole);
+  } catch (error) {
+    console.error('Error checking authentication:', error);
+    return false;
   }
 };
 

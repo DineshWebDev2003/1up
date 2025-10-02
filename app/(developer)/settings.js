@@ -4,18 +4,14 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../constants/colors';
 import GreenGradientBackground from '../components/GreenGradientBackground';
+import { logout } from '../utils/auth';
 
 const DeveloperSettingsScreen = () => {
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
-      // Clear all user-related data from storage
-      await AsyncStorage.removeItem('userData');
-      await AsyncStorage.removeItem('sessionToken');
-      
-      // Navigate to the login screen and replace the history
-      router.replace('/login');
+      await logout();
     } catch (error) {
       Alert.alert('Error', 'Failed to log out. Please try again.');
       console.error('Logout error:', error);

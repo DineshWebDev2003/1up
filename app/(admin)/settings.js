@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../constants/colors';
+import { logout } from '../utils/auth';
 
 const SettingsScreen = () => {
   const router = useRouter();
@@ -13,8 +14,8 @@ const SettingsScreen = () => {
   const [isModalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState({ title: '', content: null });
 
-  const handleLogout = () => {
-    router.replace('/login');
+  const handleLogout = async () => {
+    await logout();
   };
 
   const openModal = (title, content) => {

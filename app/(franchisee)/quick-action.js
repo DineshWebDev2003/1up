@@ -26,13 +26,12 @@ const gradients = [
   Colors.gradientInfo,
 ];
 
-// Franchisee actions - similar to admin but limited to assigned branch
+// Franchisee actions - updated with new attendance and improved student activity
 const franchiseeActions = [
   { icon: 'pencil', title: 'Post Activity', href: '/(common)/post-activity' },
   { icon: 'wallet', title: 'Income & Expense', href: '/(common)/income-expense' },
-  { icon: 'scale-balance', title: 'Settlements', href: '/(common)/settlements' },
   { icon: 'calendar', title: 'Timetable', href: '/(common)/timetable' },
-  { icon: 'clipboard-check', title: 'Attendance Hub', href: '/(common)/attendance-hub' },
+  { icon: 'clipboard-check', title: 'New Attendance', href: '/(common)/new-attendance' },
   { icon: 'cash', title: 'Update Fees', href: '/(common)/fees-update' },
   { icon: 'video', title: 'Live Monitoring', href: '/(common)/live-monitoring' },
   { icon: 'car', title: 'Track Cab', href: '/(common)/track-cab' },

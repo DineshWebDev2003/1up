@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Server API</title>
+</head>
+<body>
+    <h1>Testing Server API Endpoints</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testEndpoint(url, method = 'GET', body = null) {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(url, options);
+                const text = await response.text();
+                
+                resultsDiv.innerHTML += `
+                    <h3>${method} ${url}</h3>
+                    <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                    <p><strong>Response:</strong></p>
+                    <pre>${text}</pre>
+                    <hr>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML += `
+                    <h3>${method} ${url}</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <hr>
+                `;
+            }
+        }
+        
+        // Test various endpoints
+        async function runTests() {
+            const baseUrl = 'https://appv5.tnhappykids.in/lastchapter';
+            
+            // Test if the base API directory exists
+            await testEndpoint(`${baseUrl}/api/`);
+            
+            // Test payment endpoints
+            await testEndpoint(`${baseUrl}/api/payments/`);
+            await testEndpoint(`${baseUrl}/api/payments/create_payment.php`);
+            await testEndpoint(`${baseUrl}/api/payments/payment_history.php`);
+            
+            // Test other possible endpoints
+            await testEndpoint(`${baseUrl}/api/invoice/`);
+            await testEndpoint(`${baseUrl}/api/invoices/`);
+            
+            // Test with POST to see what happens
+            await testEndpoint(`${baseUrl}/api/payments/create_payment.php`, 'POST', {
+                student_id: 1,
+                amount: 100,
+                description: 'Test'
+            });
+        }
+        
+        // Run tests when page loads
+        window.onload = runTests;
+    </script>
+</body>
+</html>
