@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner - Student Attendance</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .scanner-container {
+            position: relative;
+            margin: 20px 0;
+        }
+
+        #video {
+            width: 100%;
+            max-width: 400px;
+            height: 300px;
+            border-radius: 15px;
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .scan-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border: 3px solid #4CAF50;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #4CAF50, transparent);
+            animation: scan 2s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(200px); }
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+
+        .status.success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4CAF50;
+        }
+
+        .status.error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+        }
+
+        .status.info {
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid #2196F3;
+        }
+
+        .student-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .student-info.show {
+            display: block;
+        }
+
+        .student-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .student-id {
+            font-size: 1.1rem;
+            opacity: 0.8;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .instructions h3 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .instructions li {
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .instructions li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 QR Code Scanner</h1>
+        <p class="subtitle">Student Attendance System</p>
+        
+        <div class="scanner-container">
+            <video id="video" autoplay muted playsinline></video>
+            <div class="scan-frame">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="startBtn" onclick="startScanning()">Start Camera</button>
+            <button id="stopBtn" onclick="stopScanning()" disabled>Stop Camera</button>
+        </div>
+        
+        <div id="status" class="status info">
+            Click "Start Camera" to begin scanning QR codes
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <div>Processing attendance...</div>
+        </div>
+        
+        <div id="studentInfo" class="student-info">
+            <div class="student-name" id="studentName"></div>
+            <div class="student-id" id="studentId"></div>
+        </div>
+        
+        <div class="instructions">
+            <h3>How to use:</h3>
+            <ul>
+                <li>Click "Start Camera" to begin</li>
+                <li>Point camera at student's QR code</li>
+                <li>Keep QR code within the green frame</li>
+                <li>Wait for automatic detection and processing</li>
+                <li>Student will be marked as present</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let scanning = false;
+        let stream = null;
+
+        // API Configuration
+        const API_BASE_URL = 'http://192.168.1.5/lastchapter/api';
+        
+        // Get session token from localStorage or prompt user
+        function getSessionToken() {
+            let token = localStorage.getItem('sessionToken');
+            if (!token) {
+                token = prompt('Please enter your session token:');
+                if (token) {
+                    localStorage.setItem('sessionToken', token);
+                }
+            }
+            return token;
+        }
+
+        async function startScanning() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                scanning = true;
+                
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                updateStatus('Camera started. Point at QR code...', 'info');
+                
+                // Start scanning loop
+                scanLoop();
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                updateStatus('Error accessing camera. Please check permissions.', 'error');
+            }
+        }
+
+        function stopScanning() {
+            scanning = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            updateStatus('Camera stopped.', 'info');
+        }
+
+        function scanLoop() {
+            if (!scanning) return;
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    handleQRCode(code.data);
+                }
+            }
+            
+            requestAnimationFrame(scanLoop);
+        }
+
+        async function handleQRCode(data) {
+            if (!scanning) return;
+            
+            scanning = false; // Stop scanning temporarily
+            updateStatus('QR Code detected! Processing...', 'info');
+            showLoading(true);
+            
+            try {
+                let studentId;
+                let studentName = 'Student';
+                
+                // Try to parse as JSON first
+                try {
+                    const qrData = JSON.parse(data);
+                    if (qrData.student_id) {
+                        studentId = qrData.student_id;
+                        studentName = qrData.name || 'Student';
+                    } else if (qrData.id) {
+                        studentId = qrData.id;
+                        studentName = qrData.name || 'Student';
+                    } else {
+                        throw new Error('Invalid QR data structure');
+                    }
+                } catch (jsonError) {
+                    // Fallback to integer parsing
+                    studentId = parseInt(data, 10);
+                    if (isNaN(studentId)) {
+                        throw new Error('Invalid QR code format');
+                    }
+                }
+                
+                // Show student info
+                document.getElementById('studentName').textContent = studentName;
+                document.getElementById('studentId').textContent = `ID: ${studentId}`;
+                document.getElementById('studentInfo').classList.add('show');
+                
+                // Mark attendance
+                await markAttendance(studentId, studentName);
+                
+            } catch (error) {
+                console.error('Error processing QR code:', error);
+                updateStatus('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+                // Resume scanning after 3 seconds
+                setTimeout(() => {
+                    scanning = true;
+                    updateStatus('Camera ready. Point at next QR code...', 'info');
+                }, 3000);
+            }
+        }
+
+        async function markAttendance(studentId, studentName) {
+            const token = getSessionToken();
+            if (!token) {
+                throw new Error('No session token available');
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/attendance/mark_manual_attendance.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    student_id: studentId,
+                    status: 'present',
+                    date: new Date().toISOString().split('T')[0]
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                updateStatus(`✅ ${studentName} marked as present!`, 'success');
+            } else {
+                throw new Error(result.message || 'Failed to mark attendance');
+            }
+        }
+
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        function showLoading(show) {
+            const loadingEl = document.getElementById('loading');
+            if (show) {
+                loadingEl.classList.add('show');
+            } else {
+                loadingEl.classList.remove('show');
+            }
+        }
+
+        // Auto-start camera on page load
+        window.addEventListener('load', () => {
+            // Check if we have camera access
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(() => {
+                    updateStatus('Camera ready. Click "Start Camera" to begin.', 'info');
+                })
+                .catch(() => {
+                    updateStatus('Camera access required. Please allow camera permission.', 'error');
+                });
+        });
+    </script>
+</body>
+</html>
