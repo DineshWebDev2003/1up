@@ -1,0 +1,97 @@
+name: TN Happy Kids Playschool - Build & Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Set up Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Android APK (Preview)
+        id: eas-build-android
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "🚀 Building Android APK..."
+          BUILD_OUTPUT=$(eas build --platform android --profile preview --non-interactive --json)
+          echo "$BUILD_OUTPUT"
+          BUILD_URL=$(echo $BUILD_OUTPUT | jq -r '.[0].artifacts.buildUrl')
+          echo "ANDROID_BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
+          echo "✅ Android build completed: $BUILD_URL"
+
+      - name: Download Android APK
+        run: |
+          echo "📱 Downloading Android APK..."
+          curl -o tn-happykids-playschool.apk "$ANDROID_BUILD_URL"
+          ls -la tn-happykids-playschool.apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tn-happykids-playschool-android
+          path: tn-happykids-playschool.apk
+          retention-days: 30
+
+      - name: Create Release (if on main branch)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: TN Happy Kids Playschool v${{ github.run_number }}
+          body: |
+            🎉 **TN Happy Kids Playschool - Release v${{ github.run_number }}**
+            
+            📱 **What's New:**
+            - Latest features and bug fixes
+            - Enhanced UI/UX improvements
+            - Performance optimizations
+            
+            📥 **Download:**
+            - Android APK available in artifacts
+            
+            🔧 **Built with:**
+            - React Native + Expo
+            - GitHub Actions CI/CD
+            
+            📅 **Build Date:** ${{ github.event.head_commit.timestamp }}
+            📝 **Commit:** ${{ github.sha }}
+          draft: false
+          prerelease: false
