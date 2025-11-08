@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "TN Happy Kids Playschool",
+    "slug": "tn-happykids-playschool",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "description": "A comprehensive playschool management app for students, teachers, and administrators",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "icon": "./assets/icon.png",
+      "jsEngine": "hermes"
+    },
+    "android": {
+      "icon": "./assets/icon.png",
+      "edgeToEdgeEnabled": true,
+      "package": "com.dineshwebdev.tnhappykidsplayschool",
+      "jsEngine": "hermes",
+      "enableProguardInReleaseBuilds": true
+    },
+    "scheme": "tnhappykids",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      "expo-web-browser",
+      "expo-font"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f7b4627b-6ad6-4c64-a10e-92ef6a4cb4ec"
+      }
+    },
+    "owner": "dineshwebdev"
+  }
+}

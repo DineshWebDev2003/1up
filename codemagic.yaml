@@ -1,0 +1,144 @@
+# Codemagic CI/CD configuration for building the Expo (React Native) app
+# in `tn-happykids-playschool/`.
+#
+# This workflow builds both Android AAB (Play Store) and APK artifacts
+# using Expo Prebuild + Gradle. Secrets must be configured in Codemagic:
+# - CM_KEYSTORE           (base64 of your release keystore .jks)
+# - CM_KEY_ALIAS          (Android key alias)
+# - CM_KEYSTORE_PASSWORD  (keystore password)
+# - CM_KEY_PASSWORD       (key password)
+#
+# Optional (for Play publishing) add: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+
+workflows:
+  android_release:
+    name: Android Release (Expo)
+    max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    environment:
+      node: 20
+      java: 17
+      vars:
+        APP_DIR: .
+    cache:
+      cache_paths:
+        - ~/.npm
+        - ~/.gradle/caches
+        - ~/.gradle/wrapper
+        - $APP_DIR/node_modules
+        - $APP_DIR/android/.gradle
+    scripts:
+      - name: Show versions
+        script: |
+          echo "Node $(node -v)"
+          echo "NPM  $(npm -v)"
+          java -version || true
+      - name: Install dependencies
+        script: |
+          cd "$APP_DIR"
+          npm ci
+      - name: Ensure Expo config icon
+        script: |
+          cd "$APP_DIR"
+          node -e "const fs=require('fs');const cfg=JSON.parse(fs.readFileSync('app.json','utf8'));if(cfg.expo){cfg.expo.android=Object.assign({},cfg.expo.android,{icon:'./assets/icon.png'});cfg.expo.ios=Object.assign({},cfg.expo.ios,{icon:'./assets/icon.png'});fs.writeFileSync('app.json',JSON.stringify(cfg,null,2));}"
+      - name: Prebuild native Android project (Expo)
+        script: |
+          cd "$APP_DIR"
+          npx expo prebuild -p android --non-interactive
+      - name: Configure Android keystore
+        script: |
+          cd "$APP_DIR/android"
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo "Writing release keystore"
+            echo "$CM_KEYSTORE" | base64 --decode > release-keystore.jks
+            # Append signing credentials to gradle.properties for release build (avoid YAML heredoc parsing issues)
+            echo "MYAPP_UPLOAD_STORE_FILE=release-keystore.jks" >> gradle.properties
+            echo "MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS" >> gradle.properties
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> gradle.properties
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> gradle.properties
+          else
+            echo "WARNING: CM_KEYSTORE not set. Build will be unsigned."
+          fi
+      - name: Build Android APK (release)
+        script: |
+          cd "$APP_DIR/android"
+          ./gradlew clean assembleRelease --no-daemon
+      - name: Verify APK size
+        script: |
+          cd "$APP_DIR"
+          FILE=$(find "$APP_DIR/android/app/build/outputs" -type f -name "*.apk" | head -n 1)
+          if [ -f "$FILE" ]; then
+            SIZE=$(du -m "$FILE" | cut -f1)
+            echo "APK size: ${SIZE} MB"
+            if [ "$SIZE" -gt 50 ]; then
+              echo "APK size exceeds 50 MB limit (50 MB). Failing build."
+              exit 1
+            fi
+          else
+            echo "APK file not found."
+            exit 1
+          fi
+    artifacts:
+      - "$APP_DIR/android/app/build/outputs/**/*.apk"
+    publishing:
+      email:
+        recipients:
+          - dev-team@tnhappykids.in
+        notify:
+          success: true
+          failure: true
+
+  ios_release:
+    name: iOS Release (Expo)
+    max_build_duration: 60
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      vars:
+        APP_DIR: .
+    cache:
+      cache_paths:
+        - ~/.npm
+        - $APP_DIR/node_modules
+        - $APP_DIR/ios/Pods
+    scripts:
+      - name: Show versions
+        script: |
+          echo "Node $(node -v)"
+          echo "NPM  $(npm -v)"
+          xcodebuild -version || true
+      - name: Install dependencies
+        script: |
+          cd "$APP_DIR"
+          npm ci
+      - name: Prebuild native iOS project (Expo)
+        script: |
+          cd "$APP_DIR"
+          npx expo prebuild -p ios --non-interactive
+      - name: Install CocoaPods
+        script: |
+          cd "$APP_DIR/ios"
+          pod install --repo-update
+      - name: Build .ipa (unsigned if no credentials)
+        script: |
+          cd "$APP_DIR/ios"
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath $PWD/build/Runner.xcarchive archive CODE_SIGNING_ALLOWED=NO || true
+          xcodebuild -exportArchive -archivePath $PWD/build/Runner.xcarchive -exportOptionsPlist <(echo '{"method":"ad-hoc","compileBitcode":false}') -exportPath $PWD/build || true
+    artifacts:
+      - "$APP_DIR/ios/build/**/*.ipa"
+    publishing:
+      email:
+        recipients:
+          - dev-team@tnhappykids.in
+        notify:
+          success: true
+          failure: true
+
+
