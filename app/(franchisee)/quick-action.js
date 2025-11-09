@@ -26,7 +26,7 @@ const gradients = [
   Colors.gradientInfo,
 ];
 
-// Franchisee actions - redesigned and optimized
+// Franchisee actions - redesigned and optimized (Leave Requests and Live Cab Screen removed)
 const franchiseeActions = [
     { icon: 'account-details', title: 'Students List', href: '/(common)/student-info', category: 'academic' },
   { icon: 'calendar-check', title: 'View Attendance', href: '/(common)/unified-attendance', category: 'attendance' },
@@ -35,15 +35,12 @@ const franchiseeActions = [
   { icon: 'calendar', title: 'Timetable', href: '/(common)/timetable', category: 'academic' },
   { icon: 'clipboard-check', title: 'Kids Attendance', href: '/(common)/new-attendance', category: 'attendance' },
   { icon: 'account-clock', title: 'Staff Attendance', href: '/(common)/staff-attendance', category: 'attendance' },
-  { icon: 'calendar-remove', title: 'Leave Requests', href: '/(common)/request-leave', category: 'management' },
-  { icon: 'cash', title: 'Payment Management', href: '/(common)/payment-management', category: 'finance' },
   { icon: 'video', title: 'Live Monitoring', href: '/(common)/live-monitoring', category: 'security' },
-  { icon: 'cctv', title: 'Live Cab Screen', href: '/(common)/live-cab-screen', category: 'security' },
   { icon: 'card-account-details', title: 'ID Card', href: '/(common)/id-card', category: 'management' },
   { icon: 'school', title: 'Student Activity', href: '/(common)/kids-feed', category: 'content' },
   { icon: 'account-plus', title: 'Assign User', href: '/(common)/assign-new-user', category: 'management' },
   { icon: 'newspaper', title: 'Newsletter', href: '/(common)/news-letter', category: 'content' },
-  { icon: 'account-group', title: 'Manage Users', href: '/(common)/manage-users', category: 'management' },
+  { icon: 'account-group', title: 'Manage Users', href: '/(common)/manage-user', category: 'management' },
 ].map((action, index) => ({ 
   ...action, 
   colors: gradients[index % gradients.length]

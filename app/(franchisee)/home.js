@@ -55,7 +55,7 @@ const FranchiseeHomeScreen = () => {
   const [branchName, setBranchName] = useState('');
   const insets = useSafeAreaInsets();
 
-  // Quick Actions for franchisee
+  // Quick Actions for franchisee (Reports removed)
   const quickActions = [
     {
       title: 'Assign User',
@@ -75,23 +75,12 @@ const FranchiseeHomeScreen = () => {
       href: '/(common)/income-expense',
       colors: ['#43e97b', '#38f9d7']
     },
-    {
-      title: 'Manage Users',
-      icon: 'account-group',
-      href: '/(common)/manage-users',
-      colors: ['#fa709a', '#fee140']
-    },
+    
     {
       title: 'Newsletter',
       icon: 'newspaper-variant-outline',
       href: '/(common)/news-letter',
       colors: ['#a8edea', '#fed6e3']
-    },
-    {
-      title: 'Reports',
-      icon: 'file-chart',
-      href: '/(common)/reports',
-      colors: ['#ffecd2', '#fcb69f']
     }
   ];
 
@@ -115,15 +104,8 @@ const FranchiseeHomeScreen = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Refresh function
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
-
-  useEffect(() => {
-    const loadData = async () => {
+  // Load data function - moved outside useEffect so it can be reused
+  const loadData = React.useCallback(async () => {
       setLoading(true);
       
       try {
@@ -147,18 +129,53 @@ const FranchiseeHomeScreen = () => {
         setUser(currentUser);
         setBranchName(currentUser.branch_name || currentUser.branch || 'Branch');
 
+        // 🔍 DEBUG: Log user data and API URLs
+        console.log('👤 Current User Data:', {
+          name: currentUser.name,
+          role: currentUser.role,
+          branch_id: currentUser.branch_id,
+          branch_name: currentUser.branch_name || currentUser.branch
+        });
+        
+        const statsUrl = `/api/dashboard/get_stats.php?branch_id=${currentUser.branch_id}`;
+        console.log('🌐 API URLs being called:', {
+          statsUrl: statsUrl,
+          messagesUrl: '/api/messages/get_messages.php?role=franchisee',
+          incomeExpenseUrl: `/api/income_expense/get_income_expense.php?branch_id=${currentUser.branch_id}`
+        });
+
         // Fetch stats, messages, and income/expense data in parallel
         const [statsResponse, messagesResponse, incomeExpenseResponse] = await Promise.all([
-          authFetch(`/api/dashboard/get_stats.php?branch_id=${currentUser.branch_id}`),
+          authFetch(statsUrl),
           authFetch('/api/messages/get_messages.php?role=franchisee'),
           authFetch(`/api/income_expense/get_income_expense.php?branch_id=${currentUser.branch_id}`)
         ]);
 
         const statsResult = await statsResponse.json();
+        
+        // 🔍 DEBUG: Log the complete stats response
+        console.log('📊 GET_STATS API Response:', {
+          success: statsResult.success,
+          data: statsResult.data,
+          message: statsResult.message,
+          fullResponse: statsResult
+        });
+        
         if (statsResult.success) {
+          console.log('✅ Stats data received:', {
+            monthly_income: statsResult.data?.monthly_income,
+            total_students: statsResult.data?.total_students,
+            present_today: statsResult.data?.present_today,
+            total_income: statsResult.data?.total_income
+          });
+          
           setStats(statsResult.data);
+          
+          // 🔍 DEBUG: Log what gets set in state
+          console.log('📝 Setting stats state to:', statsResult.data);
         } else {
-          console.error('Failed to fetch stats:', statsResult.message);
+          console.error('❌ Failed to fetch stats:', statsResult.message);
+          console.error('📄 Full error response:', statsResult);
         }
 
         const messagesResult = await messagesResponse.json();
@@ -174,6 +191,16 @@ const FranchiseeHomeScreen = () => {
         } else {
           console.error('Failed to fetch income/expense data:', incomeExpenseResult.message);
         }
+        
+        // 🔍 DEBUG: Log final state after all data is loaded
+        console.log('🎯 Final Data Loading Summary:', {
+          statsLoaded: statsResult.success,
+          messagesLoaded: messagesResult.success,
+          incomeExpenseLoaded: incomeExpenseResult.success,
+          currentStats: statsResult.success ? statsResult.data : null,
+          timestamp: new Date().toISOString()
+        });
+        
       } catch (error) {
         console.error('Error loading data:', error);
         if (error.message && error.message.includes('Authentication required')) {
@@ -184,10 +211,19 @@ const FranchiseeHomeScreen = () => {
       } finally {
         setLoading(false);
       }
-    };
+  }, [router]);
 
+  // Refresh function
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  // Load data on component mount
+  useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
 
   // Refresh user data when screen comes into focus (e.g., returning from edit profile)

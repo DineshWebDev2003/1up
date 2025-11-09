@@ -21,7 +21,7 @@ const UnifiedAttendanceScreen = () => {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [type, setType] = useState('all'); // all | student | staff
-  const [branches, setBranches] = useState([{ label: 'All', value: 'All' }]);
+  const [branches, setBranches] = useState([]);
   const [branch, setBranch] = useState('All');
   const [records, setRecords] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -60,12 +60,23 @@ const UnifiedAttendanceScreen = () => {
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const mapped = json.data.map(b => ({ label: b.name ?? b.branch_name, value: b.id ?? b.branch_id }));
-        setBranches(prev => [...prev, ...mapped]);
+        
+        // Only add "All" option for Admin or branch_id=1 users
+        if (userRole === 'Admin' || userBranch == 1) {
+          setBranches([{ label: 'All', value: 'All' }, ...mapped]);
+        } else {
+          // For franchisees and other users, show only their branches
+          setBranches(mapped);
+          // Auto-select the first branch if only one available
+          if (mapped.length === 1) {
+            setBranch(mapped[0].value);
+          }
+        }
       }
     } catch (err) {
       console.log('Branch fetch error:', err);
     }
-  }, []);
+  }, [userRole, userBranch]);
 
   /* -------------------------- Fetch Attendance ---------------------------- */
   const fetchAttendance = useCallback(async () => {
@@ -110,8 +121,14 @@ const UnifiedAttendanceScreen = () => {
   /* ------------------------------ Effects --------------------------------- */
   useEffect(() => { 
     loadUserData();
-    fetchBranches(); 
-  }, [loadUserData, fetchBranches]);
+  }, [loadUserData]);
+  
+  // Fetch branches after user data is loaded
+  useEffect(() => {
+    if (userRole !== null) {
+      fetchBranches();
+    }
+  }, [fetchBranches, userRole, userBranch]);
   useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
   /* ----------------------------- Filter Function -------------------------- */
   const applyFilters = useCallback(() => {

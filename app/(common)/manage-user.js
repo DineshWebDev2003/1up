@@ -48,9 +48,9 @@ export default function ManageUserScreen() {
       // For other users, they get users from their branch or specified branch
       let url;
       if (currentUser?.role === 'Admin') {
-        // Admin should ALWAYS get ALL users from ALL branches, ignore branch_id
-        url = '/api/users/user_crud.php?status=active';
-        console.log('👤 Admin fetching ALL users from ALL branches (ignoring branch_id:', branch_id, ')');
+        // Admin should ALWAYS get ALL users from ALL branches (both active and inactive)
+        url = '/api/users/user_crud.php';
+        console.log('👤 Admin fetching ALL users from ALL branches (both active and inactive, ignoring branch_id:', branch_id, ')');
       } else if (branch_id) {
         // Non-admin with specific branch requested (from navigation params)
         url = `/api/users/user_crud.php?branch_id=${branch_id}`;
@@ -147,6 +147,13 @@ export default function ManageUserScreen() {
         if (currentUser?.role === 'Admin') {
           const pending = result.data.filter(user => user.status === 'inactive');
           console.log('⏳ Pending users count:', pending.length);
+          console.log('⏳ Pending users details:', pending.map(u => ({ 
+            id: u.id, 
+            name: u.name, 
+            role: u.role, 
+            status: u.status,
+            branch_name: u.branch_name 
+          })));
           setPendingUsers(pending);
         }
       } else {
@@ -166,13 +173,18 @@ export default function ManageUserScreen() {
 
   const handleApproveUser = async (userId) => {
     try {
-      const response = await authFetch('/api/users/user_approval.php', {
-        method: 'POST',
+      console.log('🔄 Approving user with ID:', userId);
+      console.log('📤 Sending approval request:', { user_id: userId, action: 'approve' });
+      
+      const response = await authFetch('/api/users/user_crud.php', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, action: 'approve' }),
       });
       
+      console.log('📥 Response status:', response.status);
       const result = await response.json();
+      console.log('📥 Response data:', result);
       if (result.success) {
         Alert.alert('Success', 'User approved successfully');
         fetchUsers(); // Refresh the lists
@@ -194,13 +206,18 @@ export default function ManageUserScreen() {
 
   const handleDeclineUser = async (userId) => {
     try {
-      const response = await authFetch('/api/users/user_approval.php', {
-        method: 'POST',
+      console.log('🔄 Declining user with ID:', userId);
+      console.log('📤 Sending decline request:', { user_id: userId, action: 'decline' });
+      
+      const response = await authFetch('/api/users/user_crud.php', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, action: 'decline' }),
       });
       
+      console.log('📥 Response status:', response.status);
       const result = await response.json();
+      console.log('📥 Response data:', result);
       if (result.success) {
         Alert.alert('Success', 'User request declined');
         fetchUsers(); // Refresh the lists
@@ -635,6 +652,13 @@ export default function ManageUserScreen() {
   const renderPendingUserItem = ({ item, index }) => {
     // Check if user is actually pending approval
     const isPending = item.status === 'inactive';
+    
+    console.log('🔍 Rendering pending user:', { 
+      id: item.id, 
+      name: item.name, 
+      status: item.status, 
+      isPending 
+    });
     
     return (
       <Animatable.View animation="fadeInUp" duration={800} delay={index * 100}>

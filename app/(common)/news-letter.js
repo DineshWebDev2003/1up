@@ -51,14 +51,27 @@ const NewsLetterScreen = () => {
   const fetchPosts = async () => {
     try {
       console.log('📰 Fetching newsletters...');
-      const response = await authFetch('/api/letters/create_letter.php', {
+      const response = await authFetch('/api/news_crud.php', {
         method: 'GET'
       });
-      const result = await response.json();
+      
+      const responseText = await response.text();
+      console.log('📰 Raw API response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('❌ JSON Parse Error:', jsonError);
+        console.error('📄 Response text:', responseText);
+        throw new Error('Server returned invalid response');
+      }
+      
       console.log('📰 Newsletter API response:', result);
       
       if (result.success) {
-        const formattedPosts = result.data.map(post => ({
+        const newsData = Array.isArray(result.data) ? result.data : [];
+        const formattedPosts = newsData.map(post => ({
           ...post,
           date: post.letter_date || post.created_at?.split(' ')[0] || new Date().toISOString().split('T')[0],
           branch: post.branch_name || 'Main Branch',
@@ -69,10 +82,14 @@ const NewsLetterScreen = () => {
       } else {
         console.log('❌ Failed to fetch letters:', result.message);
         setPosts([]);
+        if (result.error_code === 'AUTH_REQUIRED') {
+          Alert.alert('Session Expired', 'Please log in again.');
+        }
       }
     } catch (error) {
       console.log('❌ Network Error fetching letters:', error);
       setPosts([]);
+      Alert.alert('Network Error', 'Unable to fetch newsletters. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -163,29 +180,41 @@ const NewsLetterScreen = () => {
   console.log('📰 Final filtered posts count:', filteredPosts.length);
   console.log('📰 Final filtered posts:', filteredPosts);
 
-  const renderPost = ({ item, index }) => (
-    <Animatable.View animation="fadeInUp" duration={800} delay={index * 100} style={styles.postContainer}>
-      {(item.image || item.image_url) && (
-        <Image 
-          source={{ uri: item.image || item.image_url }} 
-          style={styles.postImage}
-          onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
-        />
-      )}
-      <View style={styles.postContentContainer}>
-        <View style={styles.postHeader}>
-          <Text style={styles.postTitle}>{item.title}</Text>
-          {!roleLoading && (userRole === 'Admin' || (userRole === 'Franchisee' && (item.branch_name === 'Pollachi' && userBranchId === 9))) && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity onPress={() => handleEditPost(item)} style={styles.editButton}>
-                <Ionicons name="pencil-outline" size={20} color={Colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => confirmDelete(item.id)} style={styles.deleteButton}>
-                <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+  const renderPost = ({ item, index }) => {
+    // Debug log for post data
+    console.log(`📰 Rendering post ${index}:`, {
+      id: item.id,
+      title: item.title,
+      branch_name: item.branch_name,
+      branch_id: item.branch_id
+    });
+    
+    return (
+      <Animatable.View animation="fadeInUp" duration={800} delay={index * 100} style={styles.postContainer}>
+        {(item.image || item.image_url) && (
+          <Image 
+            source={{ uri: item.image || item.image_url }} 
+            style={styles.postImage}
+            onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+          />
+        )}
+        <View style={styles.postContentContainer}>
+          <View style={styles.postHeader}>
+            <Text style={styles.postTitle}>{item.title}</Text>
+            {!roleLoading && (userRole === 'Admin' || (userRole === 'Franchisee' && (item.branch_name === 'Pollachi' && userBranchId === 9))) && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity onPress={() => handleEditPost(item)} style={styles.editButton}>
+                  <Ionicons name="pencil-outline" size={20} color={Colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => {
+                  console.log('🗑️ Delete button pressed for item:', item.id, typeof item.id);
+                  confirmDelete(item.id);
+                }} style={styles.deleteButton}>
+                  <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         <View style={styles.postMetaContainer}>
           <Text style={styles.postDate}>{item.date}</Text>
           <View style={styles.branchBadge}>
@@ -196,7 +225,8 @@ const NewsLetterScreen = () => {
         <Text style={styles.postContent}>{item.content}</Text>
       </View>
     </Animatable.View>
-  );
+    );
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -230,6 +260,8 @@ const NewsLetterScreen = () => {
     try {
       // If newPostImage is a local file URI, upload it first
       if (newPostImage && (newPostImage.startsWith('file://') || newPostImage.startsWith('content://'))) {
+        console.log('📸 Starting image upload...');
+        
         const formData = new FormData();
         formData.append('image', {
           uri: newPostImage,
@@ -238,17 +270,65 @@ const NewsLetterScreen = () => {
         });
         formData.append('type', 'newsletter');
 
-        const uploadResponse = await authFetch('/api/uploads/upload_image.php', {
-          method: 'POST',
-          body: formData,
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        // Try multiple upload endpoints
+        const uploadEndpoints = [
+          '/api/upload_image.php',
+          '/api/uploads/upload_image.php',
+          '/api/simple_upload_test.php'
+        ];
 
-        const uploadResult = await uploadResponse.json();
-        if (uploadResult.success) {
-          finalImageUrl = uploadResult.url; // Update to the server URL
-        } else {
-          throw new Error(uploadResult.message || 'Failed to upload image');
+        let uploadResult = null;
+        let lastError = null;
+
+        for (const endpoint of uploadEndpoints) {
+          try {
+            console.log(`📸 Trying upload endpoint: ${endpoint}`);
+            
+            const uploadResponse = await authFetch(endpoint, {
+              method: 'POST',
+              body: formData,
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const uploadResponseText = await uploadResponse.text();
+            console.log(`📸 ${endpoint} response status:`, uploadResponse.status);
+            console.log(`📸 ${endpoint} response:`, uploadResponseText.substring(0, 300));
+            
+            // Check if response is HTML (error page)
+            if (uploadResponseText.trim().startsWith('<')) {
+              console.warn(`⚠️ ${endpoint} returned HTML, trying next endpoint`);
+              lastError = new Error(`${endpoint} returned HTML error page`);
+              continue;
+            }
+            
+            // Try to parse JSON
+            try {
+              uploadResult = JSON.parse(uploadResponseText);
+              
+              if (uploadResult.success) {
+                finalImageUrl = uploadResult.url;
+                console.log('✅ Image uploaded successfully via', endpoint, ':', finalImageUrl);
+                break; // Success, exit loop
+              } else {
+                console.warn(`⚠️ ${endpoint} returned error:`, uploadResult.message);
+                lastError = new Error(uploadResult.message || `${endpoint} upload failed`);
+                continue;
+              }
+            } catch (jsonError) {
+              console.warn(`⚠️ ${endpoint} JSON parse error:`, jsonError.message);
+              lastError = new Error(`${endpoint} returned invalid JSON`);
+              continue;
+            }
+          } catch (networkError) {
+            console.warn(`⚠️ ${endpoint} network error:`, networkError.message);
+            lastError = networkError;
+            continue;
+          }
+        }
+
+        // If no endpoint worked, throw the last error
+        if (!uploadResult || !uploadResult.success) {
+          throw lastError || new Error('All upload endpoints failed');
         }
       }
 
@@ -257,28 +337,39 @@ const NewsLetterScreen = () => {
         title: newPostTitle.trim(),
         content: newPostContent.trim(),
         letter_date: new Date().toISOString().split('T')[0],
-        branch_id: userRole === 'Admin' ? selectedBranchId : userBranchId, // Use selected branch for admin, user's branch for franchisees
+        branch_id: userRole === 'Admin' ? parseInt(selectedBranchId) : userBranchId,
         image_url: finalImageUrl
       };
 
-      const method = editMode ? 'PUT' : 'POST';
       if (editMode && editingPost) {
         letterData.id = editingPost.id;
       }
 
-      const response = await authFetch('/api/letters/create_letter.php', {
-        method: method,
+      console.log('📤 Sending letter data:', letterData);
+
+      const response = await authFetch('/api/news_crud.php', {
+        method: editMode ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(letterData),
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log('📡 Letter API response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('❌ Letter JSON Parse Error:', jsonError);
+        throw new Error('Server returned invalid response');
+      }
+      
       if (result.success) {
-        Alert.alert('Success', editMode ? 'Letter updated successfully!' : 'Letter created successfully!');
+        Alert.alert('Success', editMode ? 'Newsletter updated successfully!' : 'Newsletter created successfully!');
         resetModal();
         await fetchPosts();
       } else {
-        throw new Error(result.message || `Failed to ${editMode ? 'update' : 'create'} letter.`);
+        throw new Error(result.message || `Failed to ${editMode ? 'update' : 'create'} newsletter.`);
       }
     } catch (error) {
       console.error(`Error ${editMode ? 'updating' : 'creating'} letter:`, error);
@@ -290,22 +381,43 @@ const NewsLetterScreen = () => {
 
   const deletePost = async (postId) => {
     try {
-      const response = await authFetch('/api/letters/create_letter.php', {
+      console.log('🗑️ deletePost called with postId:', postId, typeof postId);
+      
+      // Ensure postId is a valid number
+      const numericId = parseInt(postId);
+      if (isNaN(numericId) || numericId <= 0) {
+        throw new Error(`Invalid post ID: ${postId}`);
+      }
+      
+      console.log('🗑️ Deleting post with numeric ID:', numericId);
+      
+      const response = await authFetch('/api/news_crud.php', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id: postId }),
+        body: JSON.stringify({ id: numericId }),
       });
-      const result = await response.json();
+      
+      const responseText = await response.text();
+      console.log('📡 Delete response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('❌ Delete JSON Parse Error:', jsonError);
+        throw new Error('Server returned invalid response');
+      }
+      
       if (result.success) {
-        Alert.alert('Success', 'Letter deleted successfully!');
+        Alert.alert('Success', 'Newsletter deleted successfully!');
         fetchPosts(); // Refresh posts
       } else {
-        Alert.alert('Error', result.message || 'Failed to delete letter.');
+        Alert.alert('Error', result.message || 'Failed to delete newsletter.');
       }
     } catch (error) {
-      console.error('Error deleting letter:', error);
+      console.error('Error deleting newsletter:', error);
       Alert.alert('Network Error', 'Unable to connect to the server.');
     }
   };
@@ -331,6 +443,13 @@ const NewsLetterScreen = () => {
   };
 
   const confirmDelete = (postId) => {
+    console.log('🗑️ confirmDelete called with postId:', postId, typeof postId);
+    
+    if (!postId || postId === 0 || postId === '0') {
+      Alert.alert('Error', 'Invalid post ID. Cannot delete this post.');
+      return;
+    }
+    
     Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deletePost(postId) },
