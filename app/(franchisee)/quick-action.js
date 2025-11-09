@@ -34,7 +34,7 @@ const franchiseeActions = [
   { icon: 'wallet', title: 'Income & Expense', href: '/(common)/income-expense', category: 'finance' },
   { icon: 'calendar', title: 'Timetable', href: '/(common)/timetable', category: 'academic' },
   { icon: 'clipboard-check', title: 'Kids Attendance', href: '/(common)/new-attendance', category: 'attendance' },
-  { icon: 'account-clock', title: 'Staff Attendance', href: '/(common)/staff-attendance', category: 'attendance' },
+  //{ icon: 'account-clock', title: 'Staff Attendance', href: '/(common)/staff-attendance', category: 'attendance' },
   { icon: 'video', title: 'Live Monitoring', href: '/(common)/live-monitoring', category: 'security' },
   { icon: 'card-account-details', title: 'ID Card', href: '/(common)/id-card', category: 'management' },
   { icon: 'school', title: 'Student Activity', href: '/(common)/kids-feed', category: 'content' },

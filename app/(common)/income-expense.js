@@ -390,12 +390,20 @@ const HistoryScreen = ({ historyData, onEdit, onDelete, loading, loggedInUser, o
           />
         )}
       </View>
-      <TouchableOpacity onPress={onGeneratePdf} style={{ marginVertical: 15 }}>
-        <LinearGradient colors={['#8B5CF6', '#06B6D4']} style={styles.submitButton}>
-          <MaterialIcons name="picture-as-pdf" size={24} color="#FFF" />
-          <Text style={styles.submitButtonText}>Download PDF Report</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      <View style={styles.pdfDownloadContainer}>
+        <TouchableOpacity onPress={onGeneratePdf} style={styles.pdfDownloadButton}>
+          <LinearGradient colors={['#FF6B6B', '#FF8E53']} style={styles.pdfButtonGradient}>
+            <View style={styles.pdfButtonContent}>
+              <MaterialIcons name="picture-as-pdf" size={28} color="#FFF" />
+              <View style={styles.pdfButtonTextContainer}>
+                <Text style={styles.pdfButtonTitle}>Download PDF Report</Text>
+                <Text style={styles.pdfButtonSubtitle}>Export transaction history</Text>
+              </View>
+              <MaterialIcons name="download" size={24} color="rgba(255,255,255,0.8)" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
       <FlatList
         data={historyData}
         renderItem={renderHistoryItem}
@@ -830,19 +838,45 @@ export default function IncomeExpenseScreen() {
   };
 
   const openEditModal = (transaction) => {
+    console.log('✏️ Edit modal opened for transaction:', transaction);
+    console.log('✏️ Transaction ID:', transaction.id, typeof transaction.id);
+    
+    if (!transaction.id || transaction.id === 0 || transaction.id === '0') {
+      Alert.alert('Error', 'Invalid transaction ID. Cannot edit this transaction.');
+      return;
+    }
+    
     setCurrentTransaction(transaction);
     setIsEditMode(true);
     setAmount(transaction.amount.toString());
     setDescription(transaction.description);
     setIsIncome(transaction.type === 'income');
-    setDate(new Date(transaction.transaction_date));
+    
+    // Handle date parsing more safely
+    let transactionDate;
+    try {
+      transactionDate = transaction.transaction_date || transaction.date;
+      setDate(new Date(transactionDate));
+    } catch (dateError) {
+      console.error('Date parsing error:', dateError);
+      setDate(new Date()); // Fallback to current date
+    }
+    
     setIsModalVisible(true);
   };
 
   const openDeleteModal = (transaction) => {
+    console.log('🗑️ Delete modal opened for transaction:', transaction);
+    console.log('🗑️ Transaction ID:', transaction.id, typeof transaction.id);
+    
+    if (!transaction.id || transaction.id === 0 || transaction.id === '0') {
+      Alert.alert('Error', 'Invalid transaction ID. Cannot delete this transaction.');
+      return;
+    }
+    
     Alert.alert(
       'Delete Transaction',
-      'Are you sure you want to delete this transaction?',
+      `Are you sure you want to delete "${transaction.description}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -856,12 +890,33 @@ export default function IncomeExpenseScreen() {
 
   const handleDeleteTransaction = async (transactionId) => {
     try {
+      console.log('🗑️ Deleting transaction with ID:', transactionId, typeof transactionId);
+      
+      // Ensure transactionId is a valid number
+      const numericId = parseInt(transactionId);
+      if (isNaN(numericId) || numericId <= 0) {
+        throw new Error(`Invalid transaction ID: ${transactionId}`);
+      }
+      
+      console.log('🗑️ Sending delete request for ID:', numericId);
+      
       const response = await authFetch('/api/income_expense/delete_income_expense.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: transactionId }),
+        body: JSON.stringify({ id: numericId }),
       });
-      const result = await response.json();
+      
+      const responseText = await response.text();
+      console.log('🗑️ Delete response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('❌ Delete JSON Parse Error:', jsonError);
+        throw new Error('Server returned invalid response');
+      }
+      
       if (result.success) {
         Alert.alert('Success', 'Transaction deleted successfully.');
         fetchTransactions(selectedBranch);
@@ -869,6 +924,7 @@ export default function IncomeExpenseScreen() {
         Alert.alert('Error', result.message || 'Failed to delete transaction.');
       }
     } catch (error) {
+      console.error('❌ Delete transaction error:', error);
       if (error.message !== 'Unauthorized') {
         Alert.alert('API Error', error.message);
       }
@@ -1652,30 +1708,109 @@ export default function IncomeExpenseScreen() {
 
       {renderContent()}
 
-      <Modal visible={isModalVisible} transparent={true} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{isEditMode ? 'Edit' : 'Add'} Transaction</Text>
-            <TransactionForm
-              isIncome={isIncome}
-              onIsIncomeChange={setIsIncome}
-              description={description}
-              onDescriptionChange={setDescription}
-              amount={amount}
-              onAmountChange={setAmount}
-              date={date}
-              onDateChange={setDate}
-              onShowDatePicker={(show, newDate) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (newDate) setDate(newDate);
-              }}
-              showDatePicker={showDatePicker}
-              loggedInUser={loggedInUser}
-              onSave={isEditMode ? handleUpdateTransaction : handleSaveTransaction}
-            />
-            <TouchableOpacity onPress={() => { setIsModalVisible(false); resetForm(); }} style={[styles.modalButton, styles.cancelButton]}>
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </TouchableOpacity>
+      <Modal visible={isModalVisible} transparent={true} animationType="fade">
+        <View style={styles.newModalOverlay}>
+          <View style={styles.newModalContainer}>
+            {/* Simple Header */}
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>
+                {isEditMode ? 'Edit Transaction' : 'Add Transaction'}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => { setIsModalVisible(false); resetForm(); }}
+                style={styles.newCloseButton}
+              >
+                <MaterialIcons name="close" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Simple Form Fields */}
+            <View style={styles.newModalBody}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Description Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Description</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="Enter description" 
+                    value={description} 
+                    onChangeText={setDescription}
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                {/* Amount Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Amount</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="Enter amount" 
+                    value={amount} 
+                    onChangeText={setAmount}
+                    keyboardType="numeric"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                {/* Date Picker */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Date</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateButton}>
+                    <MaterialIcons name="date-range" size={20} color="#666" />
+                    <Text style={styles.dateText}>{date.toLocaleDateString('en-GB')}</Text>
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={date}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        setShowDatePicker(false);
+                        if (selectedDate) setDate(selectedDate);
+                      }}
+                    />
+                  )}
+                </View>
+
+                {/* Income/Expense Toggle */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Transaction Type</Text>
+                  <View style={styles.toggleContainer}>
+                    <TouchableOpacity 
+                      onPress={() => setIsIncome(false)}
+                      style={[styles.toggleButton, !isIncome && styles.toggleButtonActive]}
+                    >
+                      <Text style={[styles.toggleText, !isIncome && styles.toggleTextActive]}>Expense</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={() => setIsIncome(true)}
+                      style={[styles.toggleButton, isIncome && styles.toggleButtonActive]}
+                    >
+                      <Text style={[styles.toggleText, isIncome && styles.toggleTextActive]}>Income</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+
+            {/* Simple Buttons */}
+            <View style={styles.newModalFooter}>
+              <TouchableOpacity 
+                onPress={() => { setIsModalVisible(false); resetForm(); }}
+                style={styles.newCancelButton}
+              >
+                <Text style={styles.newCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={isEditMode ? handleUpdateTransaction : handleSaveTransaction}
+                style={[styles.newSaveButton, { backgroundColor: isEditMode ? '#FF6B6B' : '#4CAF50' }]}
+              >
+                <Text style={styles.newSaveText}>
+                  {isEditMode ? 'Update' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1803,7 +1938,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   branchPicker: { flex: 1, height: 50, color: Colors.text },
-  tabContentContainer: { flex: 1 },
+  tabContentContainer: { flex: 1, paddingHorizontal: 16 },
   summaryTabsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1978,31 +2113,135 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
   emptyLottie: { width: 200, height: 200 },
   emptyText: { marginTop: 20, fontSize: 18, color: '#999' },
-  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { 
-    width: '90%', 
-    backgroundColor: '#FFF', 
-    borderRadius: 24, 
-    padding: 30, 
-    elevation: 20,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20
+  // New Simple Modal Styles
+  newModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
   },
-  modalTitle: { 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    color: '#2D3748', 
-    marginBottom: 25, 
-    textAlign: 'center',
-    letterSpacing: 0.5
+  newModalContainer: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    width: '100%',
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8
   },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
-  modalButton: { flex: 1, padding: 15, borderRadius: 10, alignItems: 'center' },
-  cancelButton: { backgroundColor: '#E0E0E0', marginRight: 10 },
-  saveButton: { backgroundColor: '#5D9CEC' },
-  modalButtonText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
+  newModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5'
+  },
+  newModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333'
+  },
+  newCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5'
+  },
+  newModalBody: {
+    padding: 16,
+    maxHeight: 400
+  },
+  newModalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5'
+  },
+  newCancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center'
+  },
+  newCancelText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666'
+  },
+  newSaveButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  newSaveText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF'
+  },
+  
+  // New Form Field Styles
+  inputGroup: {
+    marginBottom: 16
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#F9F9F9'
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F9F9F9'
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 8
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E5E5'
+  },
+  toggleButton: {
+    flex: 1,
+    padding: 12,
+    alignItems: 'center',
+    backgroundColor: '#F9F9F9'
+  },
+  toggleButtonActive: {
+    backgroundColor: '#4CAF50'
+  },
+  toggleText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666'
+  },
+  toggleTextActive: {
+    color: '#FFF',
+    fontWeight: '600'
+  },
   statusText: { fontSize: 14, fontWeight: 'bold', marginTop: 5 },
   adminActions: { flexDirection: 'row', marginTop: 8 },
   actionButton: { 
@@ -2174,5 +2413,45 @@ const styles = StyleSheet.create({
     color: '#6C757D',
     fontStyle: 'italic',
     lineHeight: 16,
+  },
+  
+  // PDF Download Button Styles
+  pdfDownloadContainer: {
+    marginHorizontal: 16,
+    marginVertical: 20,
+  },
+  pdfDownloadButton: {
+    borderRadius: 16,
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  pdfButtonGradient: {
+    borderRadius: 16,
+    padding: 20,
+    minHeight: 80,
+  },
+  pdfButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pdfButtonTextContainer: {
+    flex: 1,
+    marginLeft: 16,
+    marginRight: 12,
+  },
+  pdfButtonTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  pdfButtonSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
   },
 });
