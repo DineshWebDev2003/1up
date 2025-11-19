@@ -7,7 +7,7 @@ const PRODUCTION_API_URL = 'https://appv5.tnhappykids.in/lastchapter';
 // Local development server configuration (e.g. XAMPP)
 // 👉 Replace <YOUR_LOCAL_IP> with the actual IP of your computer running XAMPP
 //    Example: 'http://192.168.1.10/lastchapter'
-const LOCAL_API_URL = 'http://10.95.243.139/server_app/lastchapter';
+const LOCAL_API_URL = 'http://10.159.1.139/server_app/lastchapter';
 
 // Decide which server URL to use based on build type
 // • FORCE PRODUCTION MODE - Always use production API
@@ -18,7 +18,7 @@ const getServerURL = () => {
   // return LOCAL_API_URL;
   
   // FORCE PRODUCTION MODE - Always use production API
-  console.log('[Config] FORCED PRODUCTION MODE – using PRODUCTION_API_URL:', PRODUCTION_API_URL);
+  console.log('[Config] 🚀 PRODUCTION MODE ACTIVE – using PRODUCTION_API_URL:', PRODUCTION_API_URL);
   return PRODUCTION_API_URL;
   
   // Original development logic (commented out):
@@ -98,7 +98,7 @@ export const WEB_CONFIG = {
   API_BASE_URL: 'https://appv5.tnhappykids.in/lastchapter',
   
   // Alternative URLs for different environments
-  DEVELOPMENT: 'http://192.168.31.222/school/lastchapter',
+  DEVELOPMENT: 'http://10.159.1.139/server_app/lastchapter',
   PRODUCTION: 'https://appv5.tnhappykids.in/lastchapter',
   LIVE: 'https://appv5.tnhappykids.in/lastchapter',
   

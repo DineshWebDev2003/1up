@@ -1,14 +1,25 @@
 # Codemagic CI/CD configuration for building the Expo (React Native) app
-# in `tn-happykids-playschool/`.
+# Builds BOTH Android APK and iOS IPA using FREE provisioning
 #
-# This workflow builds both Android AAB (Play Store) and APK artifacts
-# using Expo Prebuild + Gradle. Secrets must be configured in Codemagic:
+# ACTIVE WORKFLOWS:
+# ✅ Android Release - Builds APK on every push to main branch
+# ✅ iOS Release - Builds IPA with FREE provisioning (7 day validity)
+#
+# ANDROID BUILD REQUIREMENTS:
 # - CM_KEYSTORE           (base64 of your release keystore .jks)
 # - CM_KEY_ALIAS          (Android key alias)
 # - CM_KEYSTORE_PASSWORD  (keystore password)
 # - CM_KEY_PASSWORD       (key password)
 #
-# Optional (for Play publishing) add: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+# iOS BUILD REQUIREMENTS (FREE):
+# - Apple ID (free account)
+# - Xcode configured with your Apple ID
+# - CodeMagic will auto-generate provisioning profile
+# - IPA valid for 7 days (free provisioning limit)
+#
+# OUTPUTS:
+# - Android: APK file (installable on any Android device)
+# - iOS: IPA file (installable on Apple devices for 7 days)
 
 workflows:
   android_release:
@@ -95,8 +106,15 @@ workflows:
           failure: true
 
   ios_release:
-    name: iOS Release (Expo)
+    name: iOS Release (Expo) - Free Provisioning (7 days)
     max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
     environment:
       node: 20
       xcode: latest
@@ -126,11 +144,34 @@ workflows:
         script: |
           cd "$APP_DIR/ios"
           pod install --repo-update
-      - name: Build .ipa (unsigned if no credentials)
+      - name: Build .ipa for iOS (Free Provisioning)
         script: |
           cd "$APP_DIR/ios"
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath $PWD/build/Runner.xcarchive archive CODE_SIGNING_ALLOWED=NO || true
-          xcodebuild -exportArchive -archivePath $PWD/build/Runner.xcarchive -exportOptionsPlist <(echo '{"method":"ad-hoc","compileBitcode":false}') -exportPath $PWD/build || true
+          # Build archive for Release with automatic signing (free provisioning)
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $PWD/build/Runner.xcarchive \
+            -allowProvisioningUpdates \
+            archive
+          
+          # Export archive to .ipa
+          # Using development method for free provisioning (7 day validity)
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/Runner.xcarchive \
+            -exportOptionsPlist <(echo '{"method":"development","compileBitcode":false,"signingStyle":"automatic"}') \
+            -exportPath $PWD/build
+          
+          # Verify IPA was created
+          if [ -f "$PWD/build/Runner.ipa" ]; then
+            echo "✅ IPA successfully created: $PWD/build/Runner.ipa"
+            SIZE=$(du -m "$PWD/build/Runner.ipa" | cut -f1)
+            echo "IPA size: ${SIZE} MB"
+            echo "⏰ NOTE: This IPA is valid for 7 days (free provisioning)"
+          else
+            echo "❌ IPA creation failed"
+            exit 1
+          fi
     artifacts:
       - "$APP_DIR/ios/build/**/*.ipa"
     publishing:

@@ -83,7 +83,7 @@ const StudentInfoScreen = () => {
   const loadStudentsList = async () => {
     try {
       console.log('📚 Loading students list for role:', userRole);
-      // Explicitly request students with role parameter
+      // Use endpoint that joins users and students tables to get student_id from students table
       const response = await authFetch('/api/users/user_crud.php?role=Student');
       const result = await response.json();
       
@@ -91,6 +91,12 @@ const StudentInfoScreen = () => {
         // Data is already filtered by API for teachers (branch-specific students)
         setStudentsList(result.data);
         console.log('✅ Students list loaded:', result.data.length, 'students');
+        
+        // Debug: Log first student to see field structure
+        if (result.data.length > 0) {
+          console.log('🔍 First student object structure:', Object.keys(result.data[0]));
+          console.log('🔍 First student data:', result.data[0]);
+        }
       } else {
         Alert.alert('Error', result.message || 'Failed to load students list');
       }
@@ -135,10 +141,20 @@ const StudentInfoScreen = () => {
   };
 
   const handleStudentSelect = (selectedStudent) => {
-    console.log('📚 Student selected:', selectedStudent.student_id);
+    // Use student_id from students table only
+    const studentId = selectedStudent.student_id;
+    console.log('📚 Student selected - using student_id:', studentId);
+    console.log('📚 Available fields:', Object.keys(selectedStudent));
+    console.log('📚 student_id from students table:', selectedStudent.student_id);
+    
+    if (!studentId) {
+      Alert.alert('Error', 'Student ID not found. Please ensure student has a valid student_id.');
+      return;
+    }
+    
     router.push({
       pathname: '/(common)/student-info',
-      params: { student_id: selectedStudent.student_id }
+      params: { student_id: studentId }
     });
   };
 
@@ -226,7 +242,7 @@ const StudentInfoScreen = () => {
       />
       <View style={styles.studentInfo}>
         <Text style={styles.studentName}>{item.name}</Text>
-        <Text style={styles.studentDetails}>ID: {item.student_id}</Text>
+        <Text style={styles.studentDetails}>Student ID: {item.student_id || 'No Student ID'}</Text>
         <Text style={styles.studentDetails}>Branch: {item.branch_name || 'No Branch'}</Text>
         {item.class && <Text style={styles.studentDetails}>Class: {item.class}</Text>}
       </View>
@@ -397,7 +413,7 @@ const StudentInfoScreen = () => {
             <View style={styles.actionButtons}>
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => router.push(`/(common)/mark-attendance?student_id=${student.id}`)}
+                onPress={() => router.push(`/(common)/mark-attendance?student_id=${student.student_id}`)}
               >
                 <Ionicons name="checkmark-circle" size={24} color={Colors.white} />
                 <Text style={styles.actionButtonText}>Mark Attendance</Text>
@@ -405,7 +421,7 @@ const StudentInfoScreen = () => {
               
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => router.push(`/(common)/student-activities?student_id=${student.id}`)}
+                onPress={() => router.push(`/(common)/student-activities?student_id=${student.student_id}`)}
               >
                 <Ionicons name="camera" size={24} color={Colors.white} />
                 <Text style={styles.actionButtonText}>View Activities</Text>
@@ -413,7 +429,7 @@ const StudentInfoScreen = () => {
               
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => router.push(`/(common)/payments-history?student_id=${student.id}`)}
+                onPress={() => router.push(`/(common)/payments-history?student_id=${student.student_id}`)}
               >
                 <Ionicons name="card" size={24} color={Colors.white} />
                 <Text style={styles.actionButtonText}>Payment History</Text>

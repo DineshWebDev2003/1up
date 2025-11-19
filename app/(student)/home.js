@@ -443,6 +443,52 @@ const StudentHomeScreen = () => {
         // Set branch name from user data
         setBranchName(studentDataWithProfile.branch_name);
         
+        // Fetch and log franchisee details assigned to this branch when student logs in
+        try {
+          console.log('🔍 Fetching franchisee for branch ID:', studentDataWithProfile.branch_id);
+          
+          // Use dedicated franchisee endpoint
+          const franchiseeResp = await authFetch('/api/users/get_franchisee_by_branch.php?branch_id=' + studentDataWithProfile.branch_id);
+          const franchiseeData = await franchiseeResp.json();
+          
+          console.log('📡 API Response:', franchiseeData);
+          
+          if (franchiseeData.success && franchiseeData.data && franchiseeData.data.length > 0) {
+            console.log('\n🏢 ===== BRANCH FRANCHISEE DETAILS =====');
+            console.log('📍 Branch:', studentDataWithProfile.branch_name, '(ID:', studentDataWithProfile.branch_id + ')');
+            console.log('👤 Student:', studentDataWithProfile.name, '(ID:', studentDataWithProfile.student_id + ')');
+            console.log('📊 Total Franchisees:', franchiseeData.count);
+            console.log('\n');
+            
+            franchiseeData.data.forEach((franchisee, index) => {
+              console.log(`📋 Franchisee ${index + 1}:`);
+              console.log('  ├─ ID: ' + franchisee.id);
+              console.log('  ├─ Name: ' + franchisee.name);
+              console.log('  ├─ Email: ' + franchisee.email);
+              console.log('  ├─ Phone: ' + franchisee.phone);
+              console.log('  ├─ Username: ' + franchisee.username);
+              console.log('  ├─ Role: ' + franchisee.role);
+              console.log('  ├─ Branch ID: ' + franchisee.branch_id);
+              console.log('  ├─ Branch Name: ' + franchisee.branch_name);
+              console.log('  ├─ Branch Address: ' + (franchisee.branch_address || 'N/A'));
+              console.log('  ├─ Branch Phone: ' + (franchisee.branch_phone || 'N/A'));
+              console.log('  ├─ Status: ' + franchisee.status);
+              console.log('  ├─ Avatar: ' + franchisee.avatar);
+              console.log('  ├─ Franchisee Share %: ' + franchisee.franchisee_share);
+              console.log('  ├─ Sharing Enabled: ' + franchisee.sharing_enabled);
+              console.log('  ├─ Number Plate: ' + (franchisee.number_plate || 'N/A'));
+              console.log('  ├─ Created At: ' + franchisee.created_at);
+              console.log('  └─ Updated At: ' + franchisee.updated_at);
+            });
+            console.log('\n🏢 ===== END FRANCHISEE DETAILS =====\n');
+          } else {
+            console.log('⚠️ No franchisee found for branch ID:', studentDataWithProfile.branch_id);
+            console.log('Response:', franchiseeData);
+          }
+        } catch (franchiseeError) {
+          console.error('❌ Error fetching franchisee details:', franchiseeError);
+        }
+        
         // Fetch additional data from APIs
         await Promise.all([
           // We will show timetable inside Live Monitoring for students, not on Home

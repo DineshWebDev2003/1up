@@ -50,6 +50,7 @@ const teacherActions = [
   //{ icon: 'calendar-remove', title: 'Request Leave', href: '/(common)/request-leave', category: 'management' },
   { icon: 'bus', title: 'Track Cab', href: '/(common)/track-cab', category: 'monitoring' },
   { icon: 'calendar-check', title: 'View Attendance', href: '/(common)/unified-attendance', category: 'academic' },
+  //{ icon: 'calendar-month', title: 'Monthly Reports', href: '/(common)/enhanced-monthly-attendance', category: 'academic' },
   { icon: 'newspaper', title: 'Newsletter', href: '/(common)/news-letter', category: 'communication' },
 ].map((action, index) => ({ 
   ...action, 

@@ -102,7 +102,7 @@ const TransactionForm = ({ isIncome, onIsIncomeChange, description, onDescriptio
     </View>
     <TextInput style={styles.input} placeholder="Description" value={description} onChangeText={onDescriptionChange} />
     <TextInput style={styles.input} placeholder="Amount" value={amount} onChangeText={onAmountChange} keyboardType="numeric" />
-    <TouchableOpacity onPress={onShowDatePicker} style={styles.datePickerButton}>
+    <TouchableOpacity onPress={() => onShowDatePicker(true)} style={styles.datePickerButton}>
       <Text>{date.toLocaleDateString('en-GB')}</Text>
     </TouchableOpacity>
     {showDatePicker && (
@@ -111,10 +111,7 @@ const TransactionForm = ({ isIncome, onIsIncomeChange, description, onDescriptio
         mode="date"
         display="default"
         onChange={(event, selectedDate) => {
-          setShowDatePicker(false);
-          if (selectedDate) {
-            setDate(selectedDate);
-          }
+          onShowDatePicker(false, selectedDate);
         }}
       />
     )}
@@ -488,19 +485,145 @@ export default function IncomeExpenseScreen() {
   const combinedHistory = useMemo(() => {
     // Only include approved and rejected transactions in history
     const formattedTransactions = (transactions && Array.isArray(transactions)) 
-      ? transactions.filter(t => t.status !== 'pending').map(t => ({ ...t, dataType: 'transaction', sortDate: new Date(t.date) })) 
+      ? transactions.filter(t => t.status !== 'pending').map(t => ({ ...t, dataType: 'transaction', sortDate: new Date(t.date || t.transaction_date) })) 
       : [];
     const formattedRequests = (requests && Array.isArray(requests)) ? requests.map(r => ({ ...r, dataType: 'request', sortDate: new Date(r.created_at) })) : [];
     return [...formattedTransactions, ...formattedRequests].sort((a, b) => b.sortDate - a.sortDate);
   }, [transactions, requests]);
 
-  // Calculate totals
+  // Filtered history based on date range
+  const filteredHistory = useMemo(() => {
+    const filtered = combinedHistory.filter(item => {
+      const itemDate = item.sortDate;
+      // Set time to start/end of day for proper comparison
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const isInRange = itemDate >= startOfDay && itemDate <= endOfDay;
+      return isInRange;
+    });
+    
+    console.log('📅 History Date Filter Applied:');
+    console.log('📅 Start Date:', startDate.toLocaleDateString('en-GB'));
+    console.log('📅 End Date:', endDate.toLocaleDateString('en-GB'));
+    console.log('📅 Total History Items:', combinedHistory.length);
+    console.log('📅 Filtered History Items:', filtered.length);
+    
+    return filtered;
+  }, [combinedHistory, startDate, endDate]);
+
+  // Calculate share amounts using same logic as PDF
+  const shareCalculations = useMemo(() => {
+    if (!filteredHistory || filteredHistory.length === 0) {
+      return {
+        totalAllIncome: 0,
+        totalAllExpenses: 0,
+        totalShareableIncome: 0,
+        totalShareableExpenses: 0,
+        admissionFees: 0,
+        nonShareableIncome: 0,
+        nonShareableExpenses: 0,
+        netShareableProfit: 0,
+        totalNetProfit: 0,
+        actualSharePercentage: 0,
+        isSharingEnabled: false,
+        franchiseeShareFromProfit: 0,
+        adminShareFromProfit: 0,
+        adminOnlyIncome: 0,
+        franchiseeFinalAmount: 0,
+        adminFinalAmount: 0,
+      };
+    }
+
+    // Calculate totals excluding rejected transactions
+    const totalAllIncome = filteredHistory
+      .filter(item => item.type === 'income' && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const totalShareableIncome = filteredHistory
+      .filter(item => item.type === 'income' && item.category !== 'admission_fee' && item.share_enabled && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const admissionFees = filteredHistory
+      .filter(item => item.type === 'income' && item.category === 'admission_fee' && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const nonShareableIncome = filteredHistory
+      .filter(item => item.type === 'income' && item.category !== 'admission_fee' && !item.share_enabled && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const totalAllExpenses = filteredHistory
+      .filter(item => item.type === 'expense' && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const totalShareableExpenses = filteredHistory
+      .filter(item => item.type === 'expense' && item.share_enabled && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    
+    const nonShareableExpenses = filteredHistory
+      .filter(item => item.type === 'expense' && !item.share_enabled && item.status !== 'rejected')
+      .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+
+    // Get actual share percentage
+    const actualSharePercentage = parseFloat(
+      (loggedInUser?.role === 'Admin' ? branchFranchiseeUser?.franchisee_share : loggedInUser?.franchisee_share) ||
+      incomeExpenseSummary.franchisee_share_percentage || 
+      sharePercentage ||
+      0
+    );
+
+    // Determine if sharing is enabled
+    const isSharingEnabled = (loggedInUser?.role === 'Admin' ? branchFranchiseeUser?.sharing_enabled : loggedInUser?.sharing_enabled) ||
+                             incomeExpenseSummary.sharing_enabled;
+
+    // Calculate net profit from shareable transactions
+    const netShareableProfit = totalShareableIncome - totalShareableExpenses;
+    
+    // Share calculations for shareable profit
+    const franchiseeShareFromProfit = (netShareableProfit * actualSharePercentage) / 100;
+    const adminShareFromProfit = netShareableProfit - franchiseeShareFromProfit;
+    
+    // Admin gets all admission fees and non-shareable income
+    const adminOnlyIncome = admissionFees + nonShareableIncome;
+    
+    // Overall totals
+    const totalNetProfit = totalAllIncome - totalAllExpenses;
+    
+    // Final settlement calculation - respect sharing status
+    const franchiseeFinalAmount = isSharingEnabled ? franchiseeShareFromProfit : 0;
+    const adminFinalAmount = isSharingEnabled ? 
+      (adminShareFromProfit + adminOnlyIncome - nonShareableExpenses) : 
+      (totalNetProfit);
+
+    return {
+      totalAllIncome,
+      totalAllExpenses,
+      totalShareableIncome,
+      totalShareableExpenses,
+      admissionFees,
+      nonShareableIncome,
+      nonShareableExpenses,
+      netShareableProfit,
+      totalNetProfit,
+      actualSharePercentage,
+      isSharingEnabled,
+      franchiseeShareFromProfit,
+      adminShareFromProfit,
+      adminOnlyIncome,
+      franchiseeFinalAmount,
+      adminFinalAmount,
+    };
+  }, [filteredHistory, loggedInUser, branchFranchiseeUser, incomeExpenseSummary, sharePercentage]);
+
+  // Calculate totals (excluding rejected transactions)
     const totalIncome = useMemo(() => {
     if (!transactions || !Array.isArray(transactions)) return 0;
     return transactions
       .filter(t => {
         const transactionDate = new Date(t.transaction_date || t.date);
-        return t.type === 'income' && transactionDate >= homeStartDate && transactionDate <= homeEndDate;
+        return t.type === 'income' && transactionDate >= homeStartDate && transactionDate <= homeEndDate && t.status !== 'rejected';
       })
       .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
   }, [transactions, homeStartDate, homeEndDate]);
@@ -510,7 +633,7 @@ export default function IncomeExpenseScreen() {
     return transactions
       .filter(t => {
         const transactionDate = new Date(t.transaction_date || t.date);
-        return t.type === 'expense' && transactionDate >= homeStartDate && transactionDate <= homeEndDate;
+        return t.type === 'expense' && transactionDate >= homeStartDate && transactionDate <= homeEndDate && t.status !== 'rejected';
       })
       .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
   }, [transactions, homeStartDate, homeEndDate]);
@@ -579,6 +702,11 @@ export default function IncomeExpenseScreen() {
       fetchRequests(selectedBranch);
     }
   }, [selectedBranch]);
+
+  // Monitor shareEnabled state changes
+  useEffect(() => {
+    console.log('🔄 Share Enabled State Changed:', shareEnabled);
+  }, [shareEnabled]);
 
   // Refresh data when screen comes into focus (e.g., returning from edit user screen)
   useFocusEffect(
@@ -749,7 +877,7 @@ export default function IncomeExpenseScreen() {
           transaction_date: date.toISOString().split('T')[0],
           payment_method: 'cash',
           received_by: isIncome ? receivedBy : null,
-          share_enabled: shareEnabled,
+          share_enabled: shareEnabled ? 1 : 0,
           branch_id: selectedBranch,
         }),
       });
@@ -812,8 +940,12 @@ export default function IncomeExpenseScreen() {
       description: description.trim(),
       transaction_date: date.toISOString().split('T')[0],
       payment_method: 'cash',
+      received_by: isIncome ? receivedBy : null,
+      share_enabled: shareEnabled ? 1 : 0,
       branch_id: selectedBranch,
     };
+
+    console.log('📤 Update payload:', payload);
 
     try {
       const endpoint = isEditMode ? '/api/income_expense/update_income_expense.php' : '/api/income_expense/add_income_expense.php';
@@ -852,6 +984,11 @@ export default function IncomeExpenseScreen() {
     setDescription(transaction.description);
     setIsIncome(transaction.type === 'income');
     
+    // Set share settings from transaction data
+    const isShareEnabled = transaction.share_enabled === 1 || transaction.share_enabled === true || transaction.share_enabled === '1' || transaction.share_enabled === 'true';
+    setShareEnabled(isShareEnabled);
+    setReceivedBy(transaction.received_by || 'admin');
+    
     // Handle date parsing more safely
     let transactionDate;
     try {
@@ -861,6 +998,13 @@ export default function IncomeExpenseScreen() {
       console.error('Date parsing error:', dateError);
       setDate(new Date()); // Fallback to current date
     }
+    
+    console.log('✏️ Share settings loaded:', {
+      share_enabled: transaction.share_enabled,
+      share_enabled_type: typeof transaction.share_enabled,
+      received_by: transaction.received_by,
+      shareEnabled: isShareEnabled
+    });
     
     setIsModalVisible(true);
   };
@@ -960,33 +1104,34 @@ export default function IncomeExpenseScreen() {
 
   const generatePdf = async () => {
     try {
-      // Calculate settlement details - include ALL transactions for complete money flow analysis
-      const totalAllIncome = combinedHistory
-        .filter(item => item.type === 'income')
+      // Calculate settlement details - use FILTERED transactions for date range analysis
+      // Calculate totals excluding rejected transactions
+      const totalAllIncome = filteredHistory
+        .filter(item => item.type === 'income' && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const totalShareableIncome = combinedHistory
-        .filter(item => item.type === 'income' && item.category !== 'admission_fee' && item.share_enabled)
+      const totalShareableIncome = filteredHistory
+        .filter(item => item.type === 'income' && item.category !== 'admission_fee' && item.share_enabled && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const admissionFees = combinedHistory
-        .filter(item => item.type === 'income' && item.category === 'admission_fee')
+      const admissionFees = filteredHistory
+        .filter(item => item.type === 'income' && item.category === 'admission_fee' && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const nonShareableIncome = combinedHistory
-        .filter(item => item.type === 'income' && item.category !== 'admission_fee' && !item.share_enabled)
+      const nonShareableIncome = filteredHistory
+        .filter(item => item.type === 'income' && item.category !== 'admission_fee' && !item.share_enabled && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const totalAllExpenses = combinedHistory
-        .filter(item => item.type === 'expense')
+      const totalAllExpenses = filteredHistory
+        .filter(item => item.type === 'expense' && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const totalShareableExpenses = combinedHistory
-        .filter(item => item.type === 'expense' && item.share_enabled)
+      const totalShareableExpenses = filteredHistory
+        .filter(item => item.type === 'expense' && item.share_enabled && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
-      const nonShareableExpenses = combinedHistory
-        .filter(item => item.type === 'expense' && !item.share_enabled)
+      const nonShareableExpenses = filteredHistory
+        .filter(item => item.type === 'expense' && !item.share_enabled && item.status !== 'rejected')
         .reduce((sum, item) => sum + parseFloat(item.amount), 0);
       
       // Use the correct franchisee share percentage - same logic as UI
@@ -1273,23 +1418,27 @@ export default function IncomeExpenseScreen() {
             
             <!-- TRANSACTIONS TABLE -->
             <h3 style="color: #007bff; margin: 30px 0 20px 0; font-size: 18px; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-              📋 Complete Transaction History (${combinedHistory.length} entries)
+              📋 Complete Transaction History (${filteredHistory.length} entries)
             </h3>
             
             <table class="transactions-table">
               <thead>
                 <tr>
-                  <th style="width: 12%;">Date</th>
-                  <th style="width: 30%;">Description</th>
-                  <th style="width: 10%;">Type</th>
-                  <th style="width: 12%;">Category</th>
-                  <th style="width: 12%;">Received By</th>
-                  <th style="width: 10%;">Sharing</th>
-                  <th style="width: 14%;">Amount</th>
+                  <th style="width: 10%;">Date</th>
+                  <th style="width: 25%;">Description</th>
+                  <th style="width: 8%;">Type</th>
+                  <th style="width: 10%;">Category</th>
+                  <th style="width: 10%;">Received By</th>
+                  <th style="width: 8%;">Status</th>
+                  <th style="width: 8%;">Sharing</th>
+                  <th style="width: 12%;">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                ${combinedHistory.map((item, index) => `
+                ${filteredHistory.map((item, index) => {
+                  const statusColor = item.status === 'rejected' ? '#c0392b' : item.status === 'approved' ? '#27ae60' : '#f39c12';
+                  const statusText = item.status === 'rejected' ? '❌ Rejected' : item.status === 'approved' ? '✅ Approved' : '⏳ Pending';
+                  return `
                   <tr class="${item.type === 'income' ? 'income-row' : 'expense-row'}">
                     <td>${new Date(item.transaction_date || item.request_date || item.date).toLocaleDateString('en-GB')}</td>
                     <td>${item.description || 'N/A'}</td>
@@ -1300,6 +1449,9 @@ export default function IncomeExpenseScreen() {
                     </td>
                     <td>${item.category || 'general'}</td>
                     <td>${item.received_by || 'N/A'}</td>
+                    <td style="text-align: center; color: ${statusColor}; font-weight: bold;">
+                      ${statusText}
+                    </td>
                     <td style="text-align: center;">
                       ${item.share_enabled ? '✅ Yes' : '❌ No'}
                     </td>
@@ -1307,7 +1459,8 @@ export default function IncomeExpenseScreen() {
                       ${item.type === 'income' ? '+' : '-'}₹${parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
                     </td>
                   </tr>
-                `).join('')}
+                `;
+                }).join('')}
               </tbody>
             </table>
             
@@ -1443,16 +1596,7 @@ export default function IncomeExpenseScreen() {
                         {loggedInUser?.role === 'Admin' ? 'Franchisee Share' : 'Your Share'}
                       </Text>
                       <Text style={styles.shareCardValue}>
-                        ₹{(() => {
-                          const userSharePercentage = parseFloat(
-                            (loggedInUser?.role === 'Admin' ? branchFranchiseeUser?.franchisee_share : loggedInUser?.franchisee_share) ||
-                            incomeExpenseSummary.franchisee_share_percentage || 
-                            0
-                          );
-                          const netProfit = incomeExpenseSummary.net_profit || 0;
-                          const franchiseeShare = (netProfit * userSharePercentage) / 100;
-                          return franchiseeShare.toLocaleString('en-IN');
-                        })()}
+                        ₹{shareCalculations.franchiseeFinalAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                       </Text>
                     </LinearGradient>
                   </View>
@@ -1462,17 +1606,7 @@ export default function IncomeExpenseScreen() {
                       <MaterialIcons name="business" size={24} color="white" />
                       <Text style={styles.shareCardLabel}>Admin Share</Text>
                       <Text style={styles.shareCardValue}>
-                        ₹{(() => {
-                          const userSharePercentage = parseFloat(
-                            (loggedInUser?.role === 'Admin' ? branchFranchiseeUser?.franchisee_share : loggedInUser?.franchisee_share) ||
-                            incomeExpenseSummary.franchisee_share_percentage || 
-                            0
-                          );
-                          const netProfit = incomeExpenseSummary.net_profit || 0;
-                          const franchiseeShare = (netProfit * userSharePercentage) / 100;
-                          const adminShare = netProfit - franchiseeShare;
-                          return adminShare.toLocaleString('en-IN');
-                        })()}
+                        ₹{shareCalculations.adminFinalAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                       </Text>
                     </LinearGradient>
                   </View>
@@ -1583,7 +1717,7 @@ export default function IncomeExpenseScreen() {
       case 'History':
         return (
           <HistoryScreen
-            historyData={combinedHistory}
+            historyData={filteredHistory}
             onEdit={openEditModal}
             onDelete={openDeleteModal}
             loading={loading}
@@ -1788,6 +1922,44 @@ export default function IncomeExpenseScreen() {
                     >
                       <Text style={[styles.toggleText, isIncome && styles.toggleTextActive]}>Income</Text>
                     </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Received By Picker - Only for Income */}
+                {isIncome && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Received By</Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker
+                        selectedValue={receivedBy}
+                        onValueChange={setReceivedBy}
+                        style={styles.picker}
+                      >
+                        <Picker.Item label="Admin" value="admin" />
+                        <Picker.Item label="Franchisee" value="franchisee" />
+                      </Picker>
+                    </View>
+                  </View>
+                )}
+
+                {/* Enable Sharing Toggle */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Enable Sharing</Text>
+                  <View style={styles.shareToggleContainer}>
+                    <Switch
+                      value={shareEnabled}
+                      onValueChange={(value) => {
+                        console.log('📱 Share toggle changed FROM:', shareEnabled, 'TO:', value);
+                        console.log('📱 Is Edit Mode:', isEditMode);
+                        console.log('📱 Current Transaction ID:', currentTransaction?.id);
+                        setShareEnabled(value);
+                      }}
+                      trackColor={{ false: '#ccc', true: '#4CAF50' }}
+                      thumbColor={'#FFF'}
+                    />
+                    <Text style={[styles.shareToggleText, { color: shareEnabled ? '#4CAF50' : '#999' }]}>
+                      {shareEnabled ? 'Enabled' : 'Disabled'}
+                    </Text>
                   </View>
                 </View>
               </ScrollView>
@@ -2075,21 +2247,11 @@ const styles = StyleSheet.create({
   sharePercentageContainer: { marginTop: 20, padding: 15, backgroundColor: '#FFF', borderRadius: 15, elevation: 2 },
   sharePercentageLabel: { fontSize: 16, fontWeight: '600', color: '#4F4F4F', marginBottom: 10 },
   sharePercentageInput: { fontSize: 16, padding: 10, backgroundColor: '#F5F5F5', borderRadius: 10 },
-  pickerContainer: { 
-    backgroundColor: '#F5F5F5', 
-    borderRadius: 10, 
-    marginBottom: 10, 
-    paddingHorizontal: 10 
-  },
   pickerLabel: { 
     fontSize: 16, 
     color: '#4F4F4F', 
     marginBottom: 5, 
     fontWeight: '600' 
-  },
-  picker: { 
-    height: 50, 
-    color: '#4F4F4F' 
   },
   historyItem: { 
     flexDirection: 'row', 
@@ -2241,6 +2403,32 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: '#FFF',
     fontWeight: '600'
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    backgroundColor: '#F9F9F9',
+    overflow: 'hidden'
+  },
+  picker: {
+    height: 50,
+    color: '#333'
+  },
+  shareToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F9F9F9',
+    gap: 12
+  },
+  shareToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8
   },
   statusText: { fontSize: 14, fontWeight: 'bold', marginTop: 5 },
   adminActions: { flexDirection: 'row', marginTop: 8 },

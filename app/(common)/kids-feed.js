@@ -35,6 +35,8 @@ const KidsFeedScreen = () => {
   const [myKidOnly, setMyKidOnly] = useState(false); // For parents to filter by their child
   const [userStudentId, setUserStudentId] = useState(null); // Student ID for parent filtering
   const [allFeedData, setAllFeedData] = useState([]); // Store all data for filtering
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
   
   // Track expanded students per activity in modal
   const [modalExpandedStudents, setModalExpandedStudents] = useState({});
@@ -186,20 +188,34 @@ const KidsFeedScreen = () => {
       try {
         // Build URL based on feed type and user role - use grouped feed API
         let url = '/api/get_grouped_feed.php';
+        const params = [];
         
+        // Only apply filters for 'my-school' feed type
         if (feedType === 'my-school') {
           if (userRole === 'Admin') {
             // Admin can see all branches or filter by selected branch
             if (selectedBranchId && selectedBranchId !== 'all') {
-              url += `?branch_id=${selectedBranchId}`;
+              params.push(`branch_id=${selectedBranchId}`);
             }
           } else {
             // Non-admin users see their branch activities
-            url += `?branch_id=${userBranchId}`;
+            params.push(`branch_id=${userBranchId}`);
+          }
+          
+          // Add month filter if provided
+          if (selectedMonth) {
+            params.push(`month=${selectedMonth}`);
           }
         }
         
+        if (params.length > 0) {
+          url += '?' + params.join('&');
+        }
+        
         console.log('Fetching activities from:', url);
+        console.log('Feed type:', feedType);
+        console.log('Selected branch ID:', selectedBranchId);
+        console.log('User role:', userRole);
         const response = await authFetch(url);
         const result = await response.json();
         console.log('Activities response:', result);
@@ -281,7 +297,7 @@ const KidsFeedScreen = () => {
 
     // Removed auto-refresh functionality as requested
     // No automatic refresh - user can manually refresh if needed
-  }, [userBranchId, userBranchName, userRole, feedType, selectedBranchId, myKidOnly, userStudentId]);
+  }, [userBranchId, userBranchName, userRole, feedType, selectedBranchId, myKidOnly, userStudentId, selectedMonth]);
 
 
   const openModal = (item) => {
@@ -964,39 +980,55 @@ const KidsFeedScreen = () => {
           </TouchableOpacity>
           </View>
           
-          {userRole === 'Admin' ? (
-            <TouchableOpacity 
-              style={styles.branchPickerContainer}
-              onPress={() => setShowBranchPicker(true)}
-            >
-              <Ionicons name="business" size={20} color={Colors.white} />
-              <Text style={styles.branchPickerText}>
-                {selectedBranchId === 'all' 
-                  ? 'All Branches' 
-                  : branches.find(b => b.id == selectedBranchId)?.name || 'Select Branch'
-                }
-              </Text>
-              <Ionicons name="chevron-down" size={18} color={Colors.white} />
-            </TouchableOpacity>
-          ) : (
-            <>
-            <View style={styles.branchInfoContainer}>
-              <Ionicons name="location" size={16} color={Colors.white} style={{ opacity: 0.8 }} />
-              <Text style={styles.headerSubtitle}>{userBranchName || 'Branch'}</Text>
-            </View>
-              {/* My Kid Only Filter for Parents */}
-              {userStudentId && (
+          {/* Show filters only for 'my-school' feed type */}
+          {feedType === 'my-school' && (
+            <View style={styles.filterRowContainer}>
+              {userRole === 'Admin' ? (
                 <TouchableOpacity 
-                  style={styles.myKidFilterContainer}
-                  onPress={() => setMyKidOnly(!myKidOnly)}
+                  style={styles.branchPickerContainer}
+                  onPress={() => setShowBranchPicker(true)}
                 >
-                  <View style={[styles.checkbox, myKidOnly && styles.checkboxChecked]}>
-                    {myKidOnly && <Ionicons name="checkmark" size={16} color={Colors.white} />}
-                  </View>
-                  <Text style={styles.myKidFilterText}>My Kid Only</Text>
+                  <Ionicons name="business" size={18} color={Colors.white} />
+                  <Text style={styles.branchPickerText}>
+                    {selectedBranchId === 'all' 
+                      ? 'All Branches' 
+                      : branches.find(b => b.id == selectedBranchId)?.name || 'Select Branch'
+                    }
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={Colors.white} />
                 </TouchableOpacity>
+              ) : (
+                <View style={styles.branchInfoContainer}>
+                  <Ionicons name="location" size={16} color={Colors.white} style={{ opacity: 0.8 }} />
+                  <Text style={styles.headerSubtitle}>{userBranchName || 'Branch'}</Text>
+                </View>
               )}
-            </>
+              
+              {/* Month Picker */}
+              <TouchableOpacity 
+                style={styles.monthPickerContainer}
+                onPress={() => setShowMonthPicker(true)}
+              >
+                <Ionicons name="calendar" size={18} color={Colors.white} />
+                <Text style={styles.monthPickerText}>
+                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* My Kid Only Filter for Parents */}
+          {userStudentId && userRole !== 'Admin' && (
+            <TouchableOpacity 
+              style={styles.myKidFilterContainer}
+              onPress={() => setMyKidOnly(!myKidOnly)}
+            >
+              <View style={[styles.checkbox, myKidOnly && styles.checkboxChecked]}>
+                {myKidOnly && <Ionicons name="checkmark" size={16} color={Colors.white} />}
+              </View>
+              <Text style={styles.myKidFilterText}>My Kid Only</Text>
+            </TouchableOpacity>
           )}
         </LinearGradient>
         
@@ -1047,6 +1079,56 @@ const KidsFeedScreen = () => {
                 <TouchableOpacity
                   style={styles.closeModalButton}
                   onPress={() => setShowBranchPicker(false)}
+                >
+                  <Text style={styles.closeModalButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
+        
+        {/* Month Picker Modal */}
+        <Modal
+          transparent={true}
+          animationType="fade"
+          visible={showMonthPicker}
+          onRequestClose={() => setShowMonthPicker(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowMonthPicker(false)}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.monthPickerModal}>
+                <Text style={styles.modalTitle}>Select Month</Text>
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() - i);
+                    const monthStr = date.toISOString().slice(0, 7);
+                    const monthLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                    
+                    return (
+                      <TouchableOpacity
+                        key={monthStr}
+                        style={[styles.monthOption, selectedMonth === monthStr && styles.monthOptionActive]}
+                        onPress={() => {
+                          setSelectedMonth(monthStr);
+                          setShowMonthPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.monthOptionText, selectedMonth === monthStr && styles.monthOptionTextActive]}>
+                          {monthLabel}
+                        </Text>
+                        {selectedMonth === monthStr && <Ionicons name="checkmark" size={20} color={Colors.white} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={styles.closeModalButton}
+                  onPress={() => setShowMonthPicker(false)}
                 >
                   <Text style={styles.closeModalButtonText}>Close</Text>
                 </TouchableOpacity>
@@ -1148,18 +1230,18 @@ const KidsFeedScreen = () => {
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalContainer}
-          activeOpacity={1}
-          onPress={() => setModalVisible(false)}
-        >
-          <View style={styles.modalContent}>
+        <SafeAreaView style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalContent}
+            activeOpacity={1}
+            onPress={() => setModalVisible(false)}
+          >
           
           <FlatList
             ref={flatListRef}
             data={feedData}
             renderItem={renderReelItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
             vertical
             pagingEnabled
             showsVerticalScrollIndicator={false}
@@ -1176,8 +1258,8 @@ const KidsFeedScreen = () => {
             snapToInterval={height}
             snapToAlignment="start"
           />
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </SafeAreaView>
       </Modal>
 
       {/* Student List Modal */}
@@ -1285,18 +1367,76 @@ const styles = StyleSheet.create({
   branchInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    flex: 1,
+    marginRight: 6,
   },
   branchPickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 25,
     marginTop: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    flex: 1,
+    marginRight: 6,
+  },
+  filterRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  monthPickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 25,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    flex: 1,
+  },
+  monthPickerText: {
+    color: Colors.white,
+    fontSize: 13,
+    marginHorizontal: 6,
+    fontWeight: '500',
+    flex: 1,
+  },
+  monthPickerModal: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 20,
+    marginTop: 'auto',
+    marginBottom: 'auto',
+    maxHeight: '70%',
+  },
+  monthOption: {
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.lightGray,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  monthOptionActive: {
+    backgroundColor: Colors.primary,
+  },
+  monthOptionText: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  monthOptionTextActive: {
+    color: Colors.white,
   },
   lottieAnimation: { width: 120, height: 120, marginBottom: -10 },
   gridContainer: {
@@ -1685,8 +1825,8 @@ const styles = StyleSheet.create({
   },
   branchPickerText: {
     color: Colors.white,
-    fontSize: 15,
-    marginHorizontal: 8,
+    fontSize: 13,
+    marginHorizontal: 6,
     fontWeight: '600',
     flex: 1,
   },

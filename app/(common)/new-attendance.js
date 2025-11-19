@@ -45,22 +45,45 @@ export default function NewAttendanceScreen() {
   const [selectedMethod, setSelectedMethod] = useState(''); // 'Manual' or 'QR Scanner'
   const [detailedStudentInfo, setDetailedStudentInfo] = useState(null);
   const [loadingStudentInfo, setLoadingStudentInfo] = useState(false);
+  const [showMonthlyView, setShowMonthlyView] = useState(false);
+  const [monthlyAttendance, setMonthlyAttendance] = useState([]);
+  const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [selectedMonthYear, setSelectedMonthYear] = useState(new Date());
 
   const fetchBranches = useCallback(safeAsync(async () => {
-    // Admin can always see all branches, others only if no branch_id is pre-selected
     const userData = await AsyncStorage.getItem('userData');
     const user = userData ? JSON.parse(userData) : null;
-    
-    if (branch_id && user?.role !== 'Admin') return; // Non-admin with branch_id can't change
     
     const response = await authFetch('/api/branches/get_branches.php');
     const result = await response.json();
     if (result.success) {
-      safeSetState(setBranches, result.data.length > 1 ? [{ id: 'All', name: 'All Branches' }, ...result.data] : result.data);
+      let availableBranches = result.data;
+      
+      if (user?.role === 'Admin') {
+        // Admin can see all branches + "All Branches" option
+        availableBranches = [{ id: 'All', name: 'All Branches' }, ...result.data];
+        console.log('👑 Admin user - showing all branches');
+      } else {
+        // Non-admin users see only their assigned branches
+        if (user?.branch_id) {
+          // Filter to show only user's assigned branch
+          availableBranches = result.data.filter(branch => 
+            branch.id === user.branch_id || branch.id === user.branch
+          );
+          console.log('👤 Non-admin user - filtered to assigned branch:', availableBranches);
+          
+          // Set their branch as default
+          if (availableBranches.length > 0 && !selectedBranchId) {
+            setSelectedBranchId(availableBranches[0].id);
+          }
+        }
+      }
+      
+      safeSetState(setBranches, availableBranches);
     } else {
       console.error('Failed to fetch branches');
     }
-  }), [branch_id]);
+  }), [selectedBranchId]);
 
   const fetchStudents = useCallback(measurePerformance('fetchStudents', async (currentBranchId) => {
     setLoading(true);
@@ -353,7 +376,9 @@ export default function NewAttendanceScreen() {
 
   const handleGuardianSelection = (guardianType, guardianName) => {
     if (selectedStudent && selectedAction) {
-      const status = selectedAction === 'IN' ? 'present' : 'absent';
+      // For avatar tap (IN/OUT), student is considered present on that day.
+      // OUT means leaving, not absent. Only the long-press flow explicitly marks 'absent'.
+      const status = 'present';
       const methodInfo = `${selectedMethod} - ${selectedAction}`;
       
       // FIXED: Always use student_id to avoid duplicate ID issues
@@ -438,13 +463,53 @@ const onDateChange = (event, selectedDate) => {
   };
 
   const navigateToMonthlyReport = () => {
-    safeNavigate(router, '/(common)/monthly-attendance-screen', { 
+    safeNavigate(router, '/(common)/enhanced-monthly-attendance', { 
       branch_id: selectedBranchId,
       branch_name: branch,
       date: date.toISOString(),
       students: JSON.stringify(students.slice(0, 10)) // Pass first 10 students as sample
     });
   };
+
+  const fetchMonthlyAttendance = useCallback(safeAsync(async () => {
+    if (!showMonthlyView) return;
+    
+    setLoadingMonthly(true);
+    try {
+      const year = selectedMonthYear.getFullYear();
+      const month = selectedMonthYear.getMonth() + 1;
+      
+      const params = new URLSearchParams({
+        year: year.toString(),
+        month: month.toString()
+      });
+
+      if (selectedBranchId && selectedBranchId !== 'All') {
+        params.append('branch_id', selectedBranchId);
+      }
+
+      const response = await authFetch(`/api/attendance/get_monthly_attendance.php?${params}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setMonthlyAttendance(result.data || []);
+      } else {
+        console.error('Failed to fetch monthly attendance:', result.message);
+        setMonthlyAttendance([]);
+      }
+    } catch (error) {
+      console.error('Error fetching monthly attendance:', error);
+      setMonthlyAttendance([]);
+    } finally {
+      setLoadingMonthly(false);
+    }
+  }), [showMonthlyView, selectedMonthYear, selectedBranchId]);
+
+  useEffect(() => {
+    if (showMonthlyView) {
+      fetchMonthlyAttendance();
+    }
+  }, [fetchMonthlyAttendance]);
 
   const navigateToTodayReport = () => {
     const today = date.toISOString().split('T')[0];
@@ -891,7 +956,7 @@ const onDateChange = (event, selectedDate) => {
   const Header = () => (
     <Animatable.View animation="fadeInDown" duration={800}>
       {/* Full Width Modern Header */}
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.fullWidthHeader}>
+      <LinearGradient colors={Colors.gradientMain} style={styles.fullWidthHeader}>
         <View style={styles.fullWidthHeaderContent}>
           <View style={styles.headerRow}>
             <TouchableOpacity style={styles.modernBackButton} onPress={() => router.back()}>
@@ -916,30 +981,42 @@ const onDateChange = (event, selectedDate) => {
       </LinearGradient>
       
       <View style={styles.modernFiltersContainer}>
-        {/* Show branch selector for Admin always, or for others if no branch_id */}
-        {(!branch_id || currentUser?.role === 'Admin') && (
+        {/* Show branch selector based on user role and available branches */}
+        {branches && branches.length > 0 && (
           <View style={styles.modernPickerContainer}>
             <MaterialCommunityIcons name="domain" size={20} color={Colors.primary} style={styles.pickerIcon} />
-            <Picker 
-              selectedValue={selectedBranchId} 
-              onValueChange={(itemValue) => {
-                setSelectedBranchId(itemValue);
-                fetchStudents(itemValue);
-              }} 
-              style={styles.modernPicker} 
-              itemStyle={styles.pickerItem}
-            >
-              {Array.isArray(branches) && branches.map(b => (
-                <Picker.Item 
-                  key={b.id || 'All'} 
-                  label={b.name || 'All Branches'} 
-                  value={b.id || 'All'} 
-                />
-              ))}
-            </Picker>
+            <Text style={styles.pickerLabel}>
+              {currentUser?.role === 'Admin' ? 'Select Branch:' : 'Your Branch:'}
+            </Text>
+            <View style={styles.pickerWrapper}>
+              <Picker 
+                selectedValue={selectedBranchId} 
+                onValueChange={(itemValue) => {
+                  console.log('Branch changed to:', itemValue);
+                  setSelectedBranchId(itemValue);
+                  fetchStudents(itemValue);
+                }} 
+                style={styles.modernPicker} 
+                itemStyle={styles.pickerItem}
+                enabled={currentUser?.role === 'Admin' || branches.length > 1}
+              >
+                {Array.isArray(branches) && branches.map(b => (
+                  <Picker.Item 
+                    key={b.id || 'All'} 
+                    label={b.name || 'All Branches'} 
+                    value={b.id || 'All'} 
+                  />
+                ))}
+              </Picker>
+            </View>
             {currentUser?.role === 'Admin' && (
               <View style={styles.adminBadge}>
-                <Text style={styles.adminBadgeText}>✓ All Access</Text>
+                <Text style={styles.adminBadgeText}>✓ Admin</Text>
+              </View>
+            )}
+            {currentUser?.role !== 'Admin' && branches.length === 1 && (
+              <View style={styles.assignedBadge}>
+                <Text style={styles.assignedBadgeText}>Assigned Branch</Text>
               </View>
             )}
           </View>
@@ -955,80 +1032,208 @@ const onDateChange = (event, selectedDate) => {
         </TouchableOpacity>
       </View>
 
-      {/* Redesigned Compact Tabs */}
-      <View style={styles.newTabContainer}>
-        <TouchableOpacity 
-          style={[styles.newTab, activeTab === 'manual' && styles.newActiveTab]}
-          onPress={() => setActiveTab('manual')}
-        >
-          <MaterialCommunityIcons name="account-edit-outline" size={16} color={activeTab === 'manual' ? Colors.white : Colors.primary} />
-          <Text style={[styles.newTabText, activeTab === 'manual' && styles.newActiveTabText]}>Manual</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.newTab, activeTab === 'qr' && styles.newActiveTab]}
-          onPress={() => {
-            setActiveTab('qr');
-            if (hasPermission) {
-              setShowQRScanner(true);
-            } else {
-              Alert.alert('Camera Permission', 'Camera permission is required for QR scanning');
-            }
-          }}
-        >
-          <MaterialCommunityIcons name="qrcode-scan" size={16} color={activeTab === 'qr' ? Colors.white : Colors.primary} />
-          <Text style={[styles.newTabText, activeTab === 'qr' && styles.newActiveTabText]}>QR Scan</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Modern Search */}
-      <View style={styles.modernSearchContainer}>
-        <MaterialCommunityIcons name="magnify" size={20} color={Colors.textSecondary} style={styles.searchIcon} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search students by name or ID..."
-          style={styles.modernSearchInput}
-          placeholderTextColor={Colors.textSecondary}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
-            <MaterialCommunityIcons name="close-circle" size={20} color={Colors.textSecondary} />
+      {/* Attendance Method Tabs - Only show in daily view */}
+      {!showMonthlyView && (
+        <View style={styles.newTabContainer}>
+          <TouchableOpacity 
+            style={[styles.newTab, activeTab === 'manual' && styles.newActiveTab]}
+            onPress={() => setActiveTab('manual')}
+          >
+            <MaterialCommunityIcons name="account-edit-outline" size={16} color={activeTab === 'manual' ? Colors.white : Colors.primary} />
+            <Text style={[styles.newTabText, activeTab === 'manual' && styles.newActiveTabText]}>Manual</Text>
           </TouchableOpacity>
-        )}
-      </View>
+          <TouchableOpacity 
+            style={[styles.newTab, activeTab === 'qr' && styles.newActiveTab]}
+            onPress={() => {
+              setActiveTab('qr');
+              if (hasPermission) {
+                setShowQRScanner(true);
+              } else {
+                Alert.alert('Camera Permission', 'Camera permission is required for QR scanning');
+              }
+            }}
+          >
+            <MaterialCommunityIcons name="qrcode-scan" size={16} color={activeTab === 'qr' ? Colors.white : Colors.primary} />
+            <Text style={[styles.newTabText, activeTab === 'qr' && styles.newActiveTabText]}>QR Scan</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Modern Search - Only show in daily view */}
+      {!showMonthlyView && (
+        <View style={styles.modernSearchContainer}>
+          <MaterialCommunityIcons name="magnify" size={20} color={Colors.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search students by name or ID..."
+            style={styles.modernSearchInput}
+            placeholderTextColor={Colors.textSecondary}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+              <MaterialCommunityIcons name="close-circle" size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Monthly View Controls */}
+      {showMonthlyView && (
+        <View style={styles.monthlyControlsContainer}>
+          <TouchableOpacity 
+            style={styles.monthNavButton}
+            onPress={() => {
+              const newDate = new Date(selectedMonthYear);
+              newDate.setMonth(newDate.getMonth() - 1);
+              setSelectedMonthYear(newDate);
+            }}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={24} color={Colors.primary} />
+          </TouchableOpacity>
+          
+          <View style={styles.monthDisplayContainer}>
+            <Text style={styles.monthDisplayText}>
+              {selectedMonthYear.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.monthNavButton}
+            onPress={() => {
+              const newDate = new Date(selectedMonthYear);
+              newDate.setMonth(newDate.getMonth() + 1);
+              setSelectedMonthYear(newDate);
+            }}
+          >
+            <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Redesigned Compact Stats */}
       <View style={styles.newStatsContainer}>
-        <View style={styles.newStatItem}>
-          <View style={[styles.newStatIcon, { backgroundColor: '#10b981' }]}>
-            <MaterialCommunityIcons name="check-circle" size={16} color={Colors.white} />
+        {!showMonthlyView ? (
+          // Daily Stats
+          <>
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#10b981' }]}>
+                <MaterialCommunityIcons name="check-circle" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{filteredStudents.filter(s => s.status === 'present').length}</Text>
+              <Text style={styles.newStatLabel}>Present</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#ef4444' }]}>
+                <MaterialCommunityIcons name="close-circle" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{filteredStudents.filter(s => s.status === 'absent').length}</Text>
+              <Text style={styles.newStatLabel}>Absent</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#f59e0b' }]}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{filteredStudents.filter(s => !s.status || s.status === 'unmarked').length}</Text>
+              <Text style={styles.newStatLabel}>Unmarked</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#8b5cf6' }]}>
+                <MaterialCommunityIcons name="account-group" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{filteredStudents.length}</Text>
+              <Text style={styles.newStatLabel}>Total</Text>
+            </View>
+          </>
+        ) : (
+          // Monthly Stats
+          <>
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#10b981' }]}>
+                <MaterialCommunityIcons name="check-circle" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{monthlyAttendance.filter(s => s.status === 'present').length}</Text>
+              <Text style={styles.newStatLabel}>Present</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#ef4444' }]}>
+                <MaterialCommunityIcons name="close-circle" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{monthlyAttendance.filter(s => s.status === 'absent').length}</Text>
+              <Text style={styles.newStatLabel}>Absent</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#3b82f6' }]}>
+                <MaterialCommunityIcons name="calendar-check" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>{monthlyAttendance.length}</Text>
+              <Text style={styles.newStatLabel}>Records</Text>
+            </View>
+            
+            <View style={styles.newStatItem}>
+              <View style={[styles.newStatIcon, { backgroundColor: '#8b5cf6' }]}>
+                <MaterialCommunityIcons name="percent" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.newStatNumber}>
+                {monthlyAttendance.length > 0 ? 
+                  Math.round((monthlyAttendance.filter(s => s.status === 'present').length / monthlyAttendance.length) * 100) : 0}%
+              </Text>
+              <Text style={styles.newStatLabel}>Attendance</Text>
+            </View>
+          </>
+        )}
+      </View>
+    </Animatable.View>
+  );
+
+  // Monthly attendance item renderer
+  const renderMonthlyItem = ({ item }) => (
+    <Animatable.View animation="fadeInUp" duration={600} style={styles.monthlyItemContainer}>
+      <View style={styles.monthlyItemContent}>
+        <View style={styles.monthlyItemHeader}>
+          <Text style={styles.monthlyStudentName}>{item.student_name || 'Unknown Student'}</Text>
+          <View style={[styles.monthlyStatusBadge, 
+            item.status === 'present' ? styles.monthlyPresentBadge : styles.monthlyAbsentBadge]}>
+            <MaterialCommunityIcons 
+              name={item.status === 'present' ? 'check-circle' : 'close-circle'} 
+              size={14} 
+              color={Colors.white} 
+            />
+            <Text style={styles.monthlyStatusText}>{item.status}</Text>
           </View>
-          <Text style={styles.newStatNumber}>{filteredStudents.filter(s => s.status === 'present').length}</Text>
-          <Text style={styles.newStatLabel}>Present</Text>
         </View>
         
-        <View style={styles.newStatItem}>
-          <View style={[styles.newStatIcon, { backgroundColor: '#ef4444' }]}>
-            <MaterialCommunityIcons name="close-circle" size={16} color={Colors.white} />
+        <View style={styles.monthlyItemDetails}>
+          <View style={styles.monthlyDetailItem}>
+            <MaterialCommunityIcons name="calendar" size={16} color={Colors.textSecondary} />
+            <Text style={styles.monthlyDetailText}>{item.date}</Text>
           </View>
-          <Text style={styles.newStatNumber}>{filteredStudents.filter(s => s.status === 'absent').length}</Text>
-          <Text style={styles.newStatLabel}>Absent</Text>
-        </View>
-        
-        <View style={styles.newStatItem}>
-          <View style={[styles.newStatIcon, { backgroundColor: '#f59e0b' }]}>
-            <MaterialCommunityIcons name="clock-outline" size={16} color={Colors.white} />
-          </View>
-          <Text style={styles.newStatNumber}>{filteredStudents.filter(s => s.status === 'unmarked' || !s.status).length}</Text>
-          <Text style={styles.newStatLabel}>Unmarked</Text>
-        </View>
-        
-        <View style={styles.newStatItem}>
-          <View style={[styles.newStatIcon, { backgroundColor: '#8b5cf6' }]}>
-            <MaterialCommunityIcons name="account-group" size={16} color={Colors.white} />
-          </View>
-          <Text style={styles.newStatNumber}>{filteredStudents.length}</Text>
-          <Text style={styles.newStatLabel}>Total</Text>
+          
+          {item.check_in_time && (
+            <View style={styles.monthlyDetailItem}>
+              <MaterialCommunityIcons name="login" size={16} color={Colors.success} />
+              <Text style={styles.monthlyDetailText}>In: {item.check_in_time}</Text>
+            </View>
+          )}
+          
+          {item.check_out_time && (
+            <View style={styles.monthlyDetailItem}>
+              <MaterialCommunityIcons name="logout" size={16} color={Colors.error} />
+              <Text style={styles.monthlyDetailText}>Out: {item.check_out_time}</Text>
+            </View>
+          )}
+          
+          {item.marked_by_name && (
+            <View style={styles.monthlyDetailItem}>
+              <MaterialCommunityIcons name="account-check" size={16} color={Colors.primary} />
+              <Text style={styles.monthlyDetailText}>By: {item.marked_by_name}</Text>
+            </View>
+          )}
         </View>
       </View>
     </Animatable.View>
@@ -1037,24 +1242,37 @@ const onDateChange = (event, selectedDate) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <FlatList
-        data={filteredStudents}
-        renderItem={renderStudentItem}
-        keyExtractor={(item, index) => `${item.id || item.student_id || index}_${item.email || item.username || index}`}
+        data={showMonthlyView ? monthlyAttendance : filteredStudents}
+        renderItem={showMonthlyView ? renderMonthlyItem : renderStudentItem}
+        keyExtractor={(item, index) => 
+          showMonthlyView 
+            ? `monthly_${item.id || index}_${item.date || index}`
+            : `daily_${item.id || item.student_id || index}_${item.email || item.username || index}`
+        }
         ListHeaderComponent={Header}
         contentContainerStyle={styles.listContainer}
         ListFooterComponent={null}
-        {...getOptimizedFlatListProps(filteredStudents.length)}
+        {...getOptimizedFlatListProps(showMonthlyView ? monthlyAttendance.length : filteredStudents.length)}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
-            {loading ? (
+            {(loading || loadingMonthly) ? (
               <ActivityIndicator size="large" color={Colors.primary} />
             ) : (
-              <MaterialCommunityIcons name="account-group-outline" size={60} color={Colors.textSecondary} />
+              <MaterialCommunityIcons 
+                name={showMonthlyView ? "calendar-month-outline" : "account-group-outline"} 
+                size={60} 
+                color={Colors.textSecondary} 
+              />
             )}
             <Text style={styles.emptyText}>
-              {loading ? 'Fetching students...' :
-               (searchQuery ? 'No students found matching your search.' : 'No students found.')}
+              {(loading || loadingMonthly) ? 
+                (showMonthlyView ? 'Loading monthly attendance...' : 'Fetching students...') :
+                (showMonthlyView ? 
+                  'No monthly attendance records found.' : 
+                  (searchQuery ? 'No students found matching your search.' : 'No students found.')
+                )
+              }
             </Text>
           </View>
         )}
@@ -2753,6 +2971,128 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  
+  // Modern Filters Container
+  modernFiltersContainer: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  
+  // Branch Picker Styles
+  modernPickerContainer: {
+    marginBottom: 12,
+    position: 'relative',
+  },
+  pickerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  pickerIcon: {
+    position: 'absolute',
+    left: 12,
+    top: 38,
+    zIndex: 1,
+  },
+  pickerWrapper: {
+    backgroundColor: Colors.containerLight,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingLeft: 40,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  modernPicker: {
+    height: 48,
+    width: '100%',
+  },
+  pickerItem: {
+    fontSize: 16,
+    color: Colors.text,
+  },
+  
+  // Date Button Styles
+  modernDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.containerLight,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 8,
+  },
+  modernDateText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+    flex: 1,
+  },
+  
+  // Search Container Styles
+  modernSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  modernSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: Colors.text,
+    paddingVertical: 0,
+  },
+  clearSearchButton: {
+    marginLeft: 8,
+  },
+  
+  // Assigned Branch Badge
+  assignedBadge: {
+    position: 'absolute',
+    top: -8,
+    right: 12,
+    backgroundColor: Colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  assignedBadgeText: {
     fontSize: 10,
     fontWeight: '700',
     color: Colors.white,

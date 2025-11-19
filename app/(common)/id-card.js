@@ -26,6 +26,56 @@ export default function IDCardScreen() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [branchData, setBranchData] = useState(null);
+  const [studentDetailLoading, setStudentDetailLoading] = useState(false);
+
+  // Fetch detailed student info when student is selected
+  useEffect(() => {
+    const fetchStudentInfo = async () => {
+      if (!selectedStudent) return;
+      
+      setStudentDetailLoading(true);
+      try {
+        console.log('🔍 Fetching detailed info for student ID:', selectedStudent.id);
+        console.log('🔍 Student name:', selectedStudent.name);
+        
+        // Fetch student info from students API using student_id
+        const response = await authFetch(`/api/students/get_student_info.php?student_id=${selectedStudent.student_id}`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          const studentInfo = result.data;
+          console.log('✅ Student info fetched:', studentInfo);
+          console.log('📞 Phone from student info:', studentInfo.phone);
+          console.log('📞 Father phone from student info:', studentInfo.father_phone);
+          console.log('📞 Mother phone from student info:', studentInfo.mother_phone);
+          
+          // Update selected student with detailed phone information
+          // Priority: student.phone > father_phone > mother_phone
+          const studentPhone = studentInfo.phone || studentInfo.father_phone || studentInfo.mother_phone;
+          
+          const updatedStudent = {
+            ...selectedStudent,
+            phone: studentPhone || selectedStudent.phone,
+            father_phone: studentInfo.father_phone,
+            mother_phone: studentInfo.mother_phone,
+            display_phone: studentPhone || selectedStudent.display_phone || 'Contact School'
+          };
+          
+          setSelectedStudent(updatedStudent);
+          console.log('✅ Student data updated with phone info:', updatedStudent);
+          console.log('📞 Final display phone:', updatedStudent.display_phone);
+        } else {
+          console.warn('⚠️ No student info returned for:', selectedStudent.student_id);
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch student info:', error);
+      } finally {
+        setStudentDetailLoading(false);
+      }
+    };
+    
+    fetchStudentInfo();
+  }, [selectedStudent?.id]);
 
   // Load data
   useEffect(() => {
@@ -45,11 +95,11 @@ export default function IDCardScreen() {
         const user = JSON.parse(userData);
         setCurrentUser(user);
 
-        // Set default branch data
+        // Set default branch data using dynamic franchisee/user phone
         const defaultBranchData = {
           name: user.branch_name || 'TN Happy Kids',
-          franchisee_number: user.franchisee_number || '95149 00080',
-          phone: '95149 00080',
+          franchisee_number: user.franchisee_number || user.phone || 'Contact School',
+          phone: user.franchisee_number || user.phone || 'Contact School',
           address: 'TN Happy Kids Playschool'
         };
         setBranchData(defaultBranchData);
@@ -60,10 +110,15 @@ export default function IDCardScreen() {
           const branchResult = await branchResponse.json();
           if (branchResult.success) {
             if (user.role === 'Admin') {
-              setBranches(['All Branches', ...branchResult.data]);
+              // Map branch objects to simple name strings for Picker
+              const branchNames = (branchResult.data || []).map(b =>
+                b.name || b.branch_name || `Branch ${b.id}`
+              );
+              setBranches(['All Branches', ...branchNames]);
             } else {
-              setBranches([user.branch_name || 'TN Happy Kids']);
-              setSelectedBranch(user.branch_name || 'TN Happy Kids');
+              const userBranchName = user.branch_name || branchResult?.data?.find(b => b.id === user.branch_id)?.name || 'TN Happy Kids';
+              setBranches([userBranchName]);
+              setSelectedBranch(userBranchName);
             }
           }
         } catch (branchError) {
@@ -83,8 +138,39 @@ export default function IDCardScreen() {
               studentList = studentList.filter(student => student.branch_id === user.branch_id);
             }
 
+            // Fetch franchisee data for each branch
+            const franchiseeDataMap = {};
+            const uniqueBranchIds = [...new Set(studentList.map(s => s.branch_id))];
+            
+            for (const branchId of uniqueBranchIds) {
+              try {
+                const franchiseeResp = await authFetch(`/api/users/get_franchisee_by_branch.php?branch_id=${branchId}`);
+                const franchiseeResult = await franchiseeResp.json();
+                if (franchiseeResult.success && franchiseeResult.data && franchiseeResult.data.length > 0) {
+                  franchiseeDataMap[branchId] = franchiseeResult.data[0].phone || 'Contact School';
+                  console.log(`✅ Franchisee phone for branch ${branchId}:`, franchiseeDataMap[branchId]);
+                } else {
+                  franchiseeDataMap[branchId] = 'Contact School';
+                }
+              } catch (franchiseeError) {
+                console.warn(`⚠️ Failed to fetch franchisee for branch ${branchId}:`, franchiseeError);
+                franchiseeDataMap[branchId] = 'Contact School';
+              }
+            }
+
             // Transform student data - students API already has proper student_id from students table
             const transformedStudents = studentList.map((student) => {
+              // Prefer student/parent contact number for front-side display
+              const displayPhone =
+                student.phone ||
+                student.parent_phone ||
+                student.father_number ||
+                student.mother_phone ||
+                '';
+
+              // Get franchisee phone from the fetched data
+              const franchiseePhone = franchiseeDataMap[student.branch_id] || 'Contact School';
+
               return {
                 id: student.user_id || student.id,
                 name: student.name,
@@ -93,7 +179,11 @@ export default function IDCardScreen() {
                 branch_id: student.branch_id,
                 class_name: student.class || 'Student',
                 email: student.email,
-                phone: student.parent_phone || student.phone,
+                // student's own phone from users/students table (front side)
+                phone: student.phone || student.parent_phone,
+                display_phone: displayPhone || 'Contact School',
+                // franchisee contact for this student's branch (back side)
+                franchisee_phone: franchiseePhone,
                 photo: student.avatar ? 
                   (student.avatar.startsWith('http') ? student.avatar : `${API_URL}${student.avatar}`) : 
                   null,
@@ -104,6 +194,7 @@ export default function IDCardScreen() {
             });
             
             console.log('✅ Loaded students with proper student_id from students table:', transformedStudents.length);
+            console.log('📞 Franchisee data map:', franchiseeDataMap);
             setStudents(transformedStudents);
           }
         } catch (studentError) {
@@ -182,7 +273,10 @@ export default function IDCardScreen() {
             <LinearGradient colors={Colors.gradientMain} style={styles.modalHeader}>
               <TouchableOpacity 
                 style={styles.backButton} 
-                onPress={() => setSelectedStudent(null)}
+                onPress={() => {
+                  console.log('🔙 Back button pressed from ID Card modal - closing modal');
+                  setSelectedStudent(null);
+                }}
               >
                 <Ionicons name="arrow-back" size={24} color={Colors.white} />
               </TouchableOpacity>
@@ -257,8 +351,10 @@ export default function IDCardScreen() {
                       
                       <View style={styles.infoRow}>
                         <MaterialIcons name="phone" size={16} color="#333" />
-                        <Text style={styles.infoLabel}>School:</Text>
-                        <Text style={styles.infoValue}>{branchData?.franchisee_number || '95149 00080'}</Text>
+                        <Text style={styles.infoLabel}>Phone:</Text>
+                        <Text style={styles.infoValue}>
+                          {studentDetailLoading ? 'Loading...' : (selectedStudent.display_phone || selectedStudent.phone || 'Contact School')}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -293,7 +389,7 @@ export default function IDCardScreen() {
                           name: selectedStudent.name,
                           class: selectedStudent.class_name,
                           branch: selectedStudent.branch_name,
-                          franchisee: branchData?.franchisee_number || '95149 00080',
+                          franchisee: branchData?.franchisee_number || 'Contact School',
                           verify_url: `https://www.tnhappykids.in/verify/${selectedStudent.student_id}`
                         })}
                         size={120}
@@ -319,7 +415,7 @@ export default function IDCardScreen() {
                       <View style={styles.contactRow}>
                         <MaterialIcons name="phone" size={16} color="white" />
                         <Text style={styles.contactText}>
-                          School: {branchData?.franchisee_number || '95149 00080'}
+                          School: {selectedStudent.franchisee_phone || branchData?.franchisee_number || 'Contact School'}
                         </Text>
                       </View>
                       
@@ -360,7 +456,10 @@ export default function IDCardScreen() {
             <LinearGradient colors={Colors.gradientMain} style={styles.header}>
               <TouchableOpacity 
                 style={styles.backButton} 
-                onPress={() => router.back()}
+                onPress={() => {
+                  console.log('🔙 Back button pressed from ID Card list');
+                  router.back();
+                }}
               >
                 <Ionicons name="arrow-back" size={24} color={Colors.white} />
               </TouchableOpacity>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, Image, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MapView, { Marker } from 'react-native-maps';
+//import MapView, { Marker } from 'react-native-maps';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Animatable from 'react-native-animatable';

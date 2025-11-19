@@ -867,13 +867,35 @@ function CreateInvoiceTab({ Colors, userData }) {
 
         <View style={createStyles.inputGroup}>
           <Text style={createStyles.inputLabel}>Branch</Text>
-          <TextInput
-            style={createStyles.textInput}
-            value={formData.branch}
-            onChangeText={(text) => setFormData({...formData, branch: text})}
-            placeholder="Enter branch name"
-            placeholderTextColor={Colors.textSecondary}
-          />
+          {feeCategory === 'admission' ? (
+            // For admission fees: Show as dropdown selector
+            <View style={createStyles.pickerContainer}>
+              <Picker
+                selectedValue={formData.branch}
+                onValueChange={(value) => setFormData({...formData, branch: value})}
+                style={createStyles.picker}
+              >
+                <Picker.Item label="Select Branch" value="" />
+                {availableBranches.map((branch) => (
+                  <Picker.Item 
+                    key={branch.id} 
+                    label={branch.name} 
+                    value={branch.name} 
+                  />
+                ))}
+              </Picker>
+            </View>
+          ) : (
+            // For monthly fees: Show as text input (auto-filled from student selection)
+            <TextInput
+              style={[createStyles.textInput, { backgroundColor: Colors.surface }]}
+              value={formData.branch}
+              onChangeText={(text) => setFormData({...formData, branch: text})}
+              placeholder="Select student to auto-fill"
+              placeholderTextColor={Colors.textSecondary}
+              editable={false}
+            />
+          )}
         </View>
 
         {feeCategory === 'monthly' && (
@@ -1020,6 +1042,8 @@ function InvoiceHistoryTab({ Colors, userData }) {
   const [endDate, setEndDate] = useState('');
   const [totalAmount, setTotalAmount] = useState(0);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('all');
 
   const getHistoryStyles = () => StyleSheet.create({
     container: {
@@ -1318,6 +1342,18 @@ function InvoiceHistoryTab({ Colors, userData }) {
     clearButtonText: {
       color: Colors.textSecondary,
     },
+    // Branch Picker Styles
+    pickerWrapper: {
+      borderWidth: 1,
+      borderColor: Colors.border,
+      borderRadius: 10,
+      backgroundColor: Colors.background,
+      overflow: 'hidden',
+    },
+    branchPicker: {
+      height: 50,
+      color: Colors.text,
+    },
     // Total Amount Display
     totalAmountCard: {
       backgroundColor: Colors.surface,
@@ -1348,15 +1384,30 @@ function InvoiceHistoryTab({ Colors, userData }) {
   const historyStyles = getHistoryStyles();
 
   useEffect(() => {
+    fetchBranches();
     loadInvoices();
   }, []);
   
   useEffect(() => {
     // Reload invoices when filters change
-    if (invoices.length > 0 || statusFilter !== 'all' || startDate || endDate) {
+    if (invoices.length > 0 || statusFilter !== 'all' || startDate || endDate || selectedBranch !== 'all') {
       loadInvoices(false);
     }
-  }, [statusFilter, startDate, endDate]);
+  }, [statusFilter, startDate, endDate, selectedBranch]);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await authFetch('/api/branches/get_branches.php');
+      const result = await response.json();
+      if (result.success) {
+        const branchesData = Array.isArray(result.data) ? result.data : [];
+        setBranches(branchesData);
+        console.log('📍 Branches loaded:', branchesData.length);
+      }
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+    }
+  };
 
   const loadInvoices = async (showLoading = true) => {
     try {
@@ -1378,6 +1429,10 @@ function InvoiceHistoryTab({ Colors, userData }) {
         params.push(`end_date=${endDate}`);
       }
       
+      if (selectedBranch !== 'all') {
+        params.push(`branch_id=${selectedBranch}`);
+      }
+      
       url += params.join('&');
       
       console.log('📊 Loading invoices from API:', url);
@@ -1390,17 +1445,18 @@ function InvoiceHistoryTab({ Colors, userData }) {
         const invoiceData = Array.isArray(result.data) ? result.data : [];
         setInvoices(invoiceData);
         
-        // Set total amount
-        setTotalAmount(result.total_amount || 0);
-        
         // Set statistics if available
         if (result.statistics) {
           setStatistics(result.statistics);
+          setTotalAmount(result.statistics.total_amount || 0);
           console.log('📈 Statistics loaded:', result.statistics);
+          console.log('💰 Total Amount:', result.statistics.formatted_total_amount);
+        } else {
+          setTotalAmount(result.total_amount || 0);
+          console.log('💰 Total Amount:', result.total_amount);
         }
         
         console.log('✅ Invoices loaded successfully:', invoiceData.length);
-        console.log('💰 Total Amount:', result.formatted_total_amount);
       } else {
         setInvoices([]);
         setStatistics(null);
@@ -1820,6 +1876,29 @@ ${invoice.month_year ? `Month: ${invoice.month_year}\n` : ''}Created: ${invoice.
         </View>
       </Animatable.View>
 
+      {/* Branch Filter Section */}
+      {branches.length > 0 && (
+        <Animatable.View animation="fadeInUp" duration={600} delay={137} style={historyStyles.datePickerContainer}>
+          <Text style={historyStyles.datePickerTitle}>🏢 Filter by Branch</Text>
+          <View style={historyStyles.pickerWrapper}>
+            <Picker
+              selectedValue={selectedBranch}
+              onValueChange={setSelectedBranch}
+              style={historyStyles.branchPicker}
+            >
+              <Picker.Item label="All Branches" value="all" />
+              {branches.map((branch) => (
+                <Picker.Item 
+                  key={branch.id} 
+                  label={branch.name} 
+                  value={branch.id.toString()} 
+                />
+              ))}
+            </Picker>
+          </View>
+        </Animatable.View>
+      )}
+
       {/* Search and Filter Section */}
       <Animatable.View animation="fadeInUp" duration={600} delay={150} style={historyStyles.searchContainer}>
         <View style={historyStyles.searchInputContainer}>
@@ -1910,6 +1989,10 @@ ${invoice.month_year ? `Month: ${invoice.month_year}\n` : ''}Created: ${invoice.
                 <View style={historyStyles.detailRow}>
                   <Text style={historyStyles.detailLabel}>Category:</Text>
                   <Text style={historyStyles.detailValue}>{invoice.fee_category || 'N/A'}</Text>
+                </View>
+                <View style={historyStyles.detailRow}>
+                  <Text style={historyStyles.detailLabel}>Branch:</Text>
+                  <Text style={historyStyles.detailValue}>{invoice.branch || 'N/A'}</Text>
                 </View>
                 {invoice.month_year && (
                   <View style={historyStyles.detailRow}>

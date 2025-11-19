@@ -40,6 +40,9 @@ const franchiseeActions = [
   { icon: 'school', title: 'Student Activity', href: '/(common)/kids-feed', category: 'content' },
   { icon: 'account-plus', title: 'Assign User', href: '/(common)/assign-new-user', category: 'management' },
   { icon: 'newspaper', title: 'Newsletter', href: '/(common)/news-letter', category: 'content' },
+    { icon: 'cash', title: 'My Invoice 2.0', href: '/(common)/my-invoice', category: 'financial' },
+ // { icon: 'calendar-month', title: 'Monthly Reports', href: '/(common)/enhanced-monthly-attendance', category: 'academic' },
+  //{ icon: 'file-download', title: 'Download Reports', href: '/(common)/enhanced-monthly-attendance', category: 'academic' },
   { icon: 'account-group', title: 'Manage Users', href: '/(common)/manage-user', category: 'management' },
 ].map((action, index) => ({ 
   ...action, 
