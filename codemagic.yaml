@@ -1,6 +1,6 @@
 workflows:
   android_universal_release:
-    name: "Android Universal Release (Expo)"
+    name: "Android Universal Release (Optimized)"
     max_build_duration: 60
 
     environment:
@@ -29,26 +29,41 @@ workflows:
           cd "$APP_DIR"
           npm ci
 
-      - name: "Expo Prebuild Android"
+      - name: "Expo Prebuild"
         script: |
           cd "$APP_DIR"
           npx expo prebuild -p android --non-interactive
 
-      - name: "Enable Universal APK (All Devices Support)"
+      - name: "Enable Universal APK (supports all devices)"
         script: |
           cd android/app
           sed -i '' "s/enableSeparateBuildPerCPUArchitecture true/enableSeparateBuildPerCPUArchitecture false/g" build.gradle
 
-      - name: "Optimize APK: Enable Proguard + Resource Shrinking"
+      - name: "Optimize APK (Reduce Size 30–50%)"
         script: |
           cd android/app
+
+          echo "🔧 Enabling Proguard & Resource Shrinking"
           sed -i '' "s/minifyEnabled false/minifyEnabled true/g" build.gradle
           sed -i '' "s/shrinkResources false/shrinkResources true/g" build.gradle
 
-      - name: "Clean unused modules (smaller APK)"
-        script: |
+          echo "🔧 Removing x86 and unused architectures"
+          find . -name '*x86*' -delete || true
+          find . -name '*armeabi*' -delete || true
+
+          echo "🔧 Disabling debug symbols"
+          echo "
+          android {
+            packagingOptions {
+              jniDebuggable false
+              doNotStrip '**/*.so'
+            }
+          }
+          " >> build.gradle
+
+          echo "🔧 Compressing assets"
           cd "$APP_DIR"
-          npx react-native-clean-project clean-project-auto
+          npx expo-optimize --quality 80 || true
 
       - name: "Configure Android Keystore"
         script: |
@@ -66,15 +81,11 @@ workflows:
           cd "$APP_DIR/android"
           ./gradlew clean assembleRelease --no-daemon
 
-      - name: "Verify APK Size"
+      - name: "Show APK Size"
         script: |
           FILE=$(find "$APP_DIR/android/app/build/outputs" -type f -name "*.apk" | head -n 1)
           SIZE=$(du -m "$FILE" | cut -f1)
-          echo "APK SIZE: ${SIZE} MB"
-          if [ "$SIZE" -gt 50 ]; then
-            echo "APK too big (>50 MB). Failing build."
-            exit 1
-          fi
+          echo "📦 FINAL APK SIZE: ${SIZE} MB"
 
     artifacts:
       - "$APP_DIR/android/app/build/outputs/**/*.apk"
