@@ -1,12 +1,11 @@
 workflows:
   android_universal_release:
-    name: Android Universal Release Optimized
+    name: "Android Universal Release Optimized"
     max_build_duration: 60
 
     environment:
       node: 20
       java: 17
-      android: latest
       vars:
         PACKAGE_NAME: $PACKAGE_NAME
         ANDROID_KEYSTORE: $ANDROID_KEYSTORE
@@ -16,34 +15,31 @@ workflows:
         BUILD_EMAIL: $BUILD_EMAIL
 
     scripts:
-
       - name: Install Dependencies
         script: |
           npm install --legacy-peer-deps
-          # Remove unused packages automatically
-          npm prune
+          npm prune  # remove unused packages
 
-      - name: Optimize Assets (Reduce Size)
+      - name: Optimize Assets (Reduce App Size)
         script: |
           npx expo-optimize
 
-      - name: Expo Prebuild (Universal Support)
+      - name: Expo Prebuild (Clean)
         script: |
-          npx expo prebuild --platform android --non-interactive \
-            --clean
+          npx expo prebuild --platform android --non-interactive --clean
 
-      - name: Enable Universal APK (armeabi + arm64 + x86 + x86_64)
+      - name: Enable Universal APK (All Devices Support)
         script: |
           cd android/app
           sed -i "s/enableSeparateBuildPerCPUArchitecture true/enableSeparateBuildPerCPUArchitecture false/g" build.gradle
 
-      - name: Enable Proguard + Resource Shrinking (Maximum Size Reduce)
+      - name: Enable Proguard & Resource Shrinking
         script: |
           cd android/app
           sed -i 's/minifyEnabled false/minifyEnabled true/g' build.gradle
           sed -i 's/shrinkResources false/shrinkResources true/g' build.gradle
 
-      - name: Build Signed UNIVERSAL APK
+      - name: Build Universal Signed APK
         script: |
           cd $CM_BUILD_DIR/android
           ./gradlew clean
