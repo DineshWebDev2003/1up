@@ -1,99 +1,60 @@
 workflows:
-  android_universal_release:
-    name: "Android Universal Release (Optimized)"
+  android_release:
+    name: Android Release Build
     max_build_duration: 60
-
     environment:
-      node: 20
-      java: 17
       vars:
-        APP_DIR: .
-
-    cache:
-      cache_paths:
-        - ~/.npm
-        - ~/.gradle/caches
-        - ~/.gradle/wrapper
-        - $APP_DIR/node_modules
-        - $APP_DIR/android/.gradle
-
+        PACKAGE_NAME: "com.yourapp"
+      groups:
+        - github_secrets
     scripts:
-      - name: "Show versions"
+      - name: Install dependencies
         script: |
-          echo "Node $(node -v)"
-          echo "NPM  $(npm -v)"
-          java -version || true
+          npm install --legacy-peer-deps
 
-      - name: "Install dependencies"
+      - name: Clean Android build
         script: |
-          cd "$APP_DIR"
-          npm ci
+          cd android
+          ./gradlew clean
+          cd ..
 
-      - name: "Expo Prebuild"
+      - name: Remove unused packages (tree-shake JS)
         script: |
-          cd "$APP_DIR"
-          npx expo prebuild -p android --non-interactive
+          npx react-native-clean-project --remove-iOS-build --remove-android-build || true
 
-      - name: "Enable Universal APK (supports all devices)"
+      - name: Optimize assets
         script: |
-          cd android/app
-          sed -i '' "s/enableSeparateBuildPerCPUArchitecture true/enableSeparateBuildPerCPUArchitecture false/g" build.gradle
+          npx expo-optimize
 
-      - name: "Optimize APK (Reduce Size 30–50%)"
+      - name: Enable Universal APK
         script: |
-          cd android/app
+          sed -i '' 's/enableSplits = true/enableSplits = false/g' android/app/build.gradle || true
 
-          echo "🔧 Enabling Proguard & Resource Shrinking"
-          sed -i '' "s/minifyEnabled false/minifyEnabled true/g" build.gradle
-          sed -i '' "s/shrinkResources false/shrinkResources true/g" build.gradle
-
-          echo "🔧 Removing x86 and unused architectures"
-          find . -name '*x86*' -delete || true
-          find . -name '*armeabi*' -delete || true
-
-          echo "🔧 Disabling debug symbols"
-          echo "
-          android {
-            packagingOptions {
-              jniDebuggable false
-              doNotStrip '**/*.so'
-            }
-          }
-          " >> build.gradle
-
-          echo "🔧 Compressing assets"
-          cd "$APP_DIR"
-          npx expo-optimize --quality 80 || true
-
-      - name: "Configure Android Keystore"
+      - name: Build Release APK
         script: |
-          cd "$APP_DIR/android"
-          if [ -n "$CM_KEYSTORE" ]; then
-            echo "$CM_KEYSTORE" | base64 --decode > release-keystore.jks
-            echo "MYAPP_UPLOAD_STORE_FILE=release-keystore.jks" >> gradle.properties
-            echo "MYAPP_UPLOAD_KEY_ALIAS=$CM_KEY_ALIAS" >> gradle.properties
-            echo "MYAPP_UPLOAD_STORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> gradle.properties
-            echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> gradle.properties
+          cd android
+          ./gradlew assembleRelease
+          cd ..
+
+      - name: Verify APK size (<50MB target)
+        script: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          APK_SIZE_MB=$(du -m "$APK_PATH" | cut -f1)
+
+          echo "APK SIZE: $APK_SIZE_MB MB"
+
+          if [ "$APK_SIZE_MB" -gt 80 ]; then
+            echo "APK too big (>80 MB). Failing build."
+            exit 1
           fi
 
-      - name: "Build Universal APK"
-        script: |
-          cd "$APP_DIR/android"
-          ./gradlew clean assembleRelease --no-daemon
-
-      - name: "Show APK Size"
-        script: |
-          FILE=$(find "$APP_DIR/android/app/build/outputs" -type f -name "*.apk" | head -n 1)
-          SIZE=$(du -m "$FILE" | cut -f1)
-          echo "📦 FINAL APK SIZE: ${SIZE} MB"
-
     artifacts:
-      - "$APP_DIR/android/app/build/outputs/**/*.apk"
+      - android/app/build/outputs/**/*.apk
 
     publishing:
       email:
         recipients:
-          - dev-team@tnhappykids.in
+          - $MAIL_ID
         notify:
           success: true
           failure: true
