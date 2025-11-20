@@ -1,6 +1,6 @@
 workflows:
   android_universal_release:
-    name: Android Universal Release (Expo) - Small APK + All Devices Support
+    name: "Android Universal Release (Expo)"
     max_build_duration: 60
 
     environment:
@@ -18,39 +18,39 @@ workflows:
         - $APP_DIR/android/.gradle
 
     scripts:
-      - name: Show versions
+      - name: "Show versions"
         script: |
           echo "Node $(node -v)"
           echo "NPM  $(npm -v)"
           java -version || true
 
-      - name: Install dependencies
+      - name: "Install dependencies"
         script: |
           cd "$APP_DIR"
           npm ci
 
-      - name: Expo Prebuild Android
+      - name: "Expo Prebuild Android"
         script: |
           cd "$APP_DIR"
           npx expo prebuild -p android --non-interactive
 
-      - name: Fix: Enable Universal APK Support
+      - name: "Enable Universal APK (All Devices Support)"
         script: |
           cd android/app
           sed -i '' "s/enableSeparateBuildPerCPUArchitecture true/enableSeparateBuildPerCPUArchitecture false/g" build.gradle
 
-      - name: Optimize App: Enable Proguard + Resource Shrinking
+      - name: "Optimize APK: Enable Proguard + Resource Shrinking"
         script: |
           cd android/app
           sed -i '' "s/minifyEnabled false/minifyEnabled true/g" build.gradle
           sed -i '' "s/shrinkResources false/shrinkResources true/g" build.gradle
 
-      - name: Remove Unused Node Modules (Reduce APK Size)
+      - name: "Clean unused modules (smaller APK)"
         script: |
           cd "$APP_DIR"
           npx react-native-clean-project clean-project-auto
 
-      - name: Configure Android Keystore
+      - name: "Configure Android Keystore"
         script: |
           cd "$APP_DIR/android"
           if [ -n "$CM_KEYSTORE" ]; then
@@ -61,18 +61,18 @@ workflows:
             echo "MYAPP_UPLOAD_KEY_PASSWORD=$CM_KEY_PASSWORD" >> gradle.properties
           fi
 
-      - name: Build Universal APK
+      - name: "Build Universal APK"
         script: |
           cd "$APP_DIR/android"
           ./gradlew clean assembleRelease --no-daemon
 
-      - name: Verify APK Size
+      - name: "Verify APK Size"
         script: |
           FILE=$(find "$APP_DIR/android/app/build/outputs" -type f -name "*.apk" | head -n 1)
           SIZE=$(du -m "$FILE" | cut -f1)
-          echo "APK SIZE: $SIZE MB"
+          echo "APK SIZE: ${SIZE} MB"
           if [ "$SIZE" -gt 50 ]; then
-            echo "APK too big! (>50 MB)."
+            echo "APK too big (>50 MB). Failing build."
             exit 1
           fi
 
